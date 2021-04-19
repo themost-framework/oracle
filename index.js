@@ -1,7 +1,7 @@
 // Copyright (c) 2017-2021, THEMOST LP. All rights reserved.
 const oracledb = require('oracledb');
 const async =  require('async');
-const util = ('util');
+const util = require('util');
 const _ = require('lodash');
 const {SqlFormatter, SqlUtils, QueryField} = require('@themost/query');
 const {TraceUtils,LangUtils}  = require('@themost/common');
