@@ -193,19 +193,21 @@ class OracleAdapter {
                 s =field.size ? util.format('NVARCHAR2(%s)', field.size) : 'NVARCHAR2(48)';
                 break;
             case 'Integer':
-                s = 'NUMBER' + (field.size ? '(' + field.size + ',0)':'(19,0)' );
+                s = 'NUMBER' + (size <= 38 ? '(' + size + ',0)':'(19,0)' );
                 break;
             case 'URL':
             case 'Text':
+                s = size > 0 ? util.format('NVARCHAR2(%s)', size) : 'NVARCHAR2(255)';
+                break;
             case 'Note':
-                s =field.size ? util.format('NVARCHAR2(%s)', field.size) : 'NVARCHAR2(255)';
+                s = size > 0 ? util.format('NVARCHAR2(%s)', size) : 'NVARCHAR2(2000)';
                 break;
             case 'Image':
             case 'Binary':
                 s ='LONG RAW';
                 break;
             case 'Guid':
-                s = 'VARCHAR2(36)';
+                s = 'VARCHAR(36)';
                 break;
             case 'Short':
                 s = 'NUMBER(5,0)';
