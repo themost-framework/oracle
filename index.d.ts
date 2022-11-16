@@ -72,6 +72,8 @@ export declare class OracleAdapter {
     executeAsync<T>(query: any, values: any): Promise<Array<T>>;
     table(name: string): OracleAdapterTable;
     view(name: string): OracleAdapterView;
+    resetIdentity(entity: string, attribute: string, callback: (err: Error) => void): void;
+    resetIdentityAsync(entity: string, attribute: string): Promise<void>;
     // indexes(name: string): OracleAdapterIndexes;
     // database(name: string): OracleAdapterDatabase;
 }

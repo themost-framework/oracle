@@ -545,6 +545,49 @@ class OracleAdapter {
         });
     }
 
+    resetIdentity(entity, attribute, callback) {
+        const self = this;
+        return self.selectIdentity(entity, attribute , function(err) {
+            if (err) {
+                return callback(err);
+            }
+            // get max value
+            let sql = util.format('SELECT MAX("%s") AS "maxValue" FROM "%s"', attribute, entity)
+            return self.execute(sql, [], function(err, results) {
+                if (err) {
+                    return callback(err);
+                }
+                const maxValue = results && results.length && results[0].maxValue;
+                if (maxValue) {
+                    let name = entity + '_' + attribute + '_seq';
+                    if (name.length>30) {
+                        name=entity.substring(0,26) + '_seq';
+                    }
+                    sql = util.format('ALTER SEQUENCE "%s" RESTART START WITH %s', name, maxValue);
+                    return self.execute(sql, [], function(err) {
+                        if (err) {
+                            return callback(err);
+                        }
+                        return callback();
+                    });
+                }
+                return callback();
+            });
+        });
+    }
+
+    resetIdentityAsync(entity, attribute) {
+        const self = this;
+        return new Promise(function(resolve, reject) {
+            void self.resetIdentity(entity, attribute, function(err) {
+                if (err) {
+                    return reject(err);
+                }
+                return resolve();
+            });
+        });
+    }
+
     /**
      * Produces a new counter auto increment value for the given entity and attribute.
      * @param entity {String} The target entity name
