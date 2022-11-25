@@ -171,9 +171,6 @@ class OracleAdapter {
             case 'Byte':
                 s = 'NUMBER(3,0)';
                 break;
-            case 'Number':
-                s = 'NUMBER(19,4)';
-                break;
             case 'Float':
                 s = 'NUMBER(19,4)';
                 break;
@@ -182,6 +179,7 @@ class OracleAdapter {
             case 'Currency':
                 s =  'NUMBER(' + (field.size || 19) + ',4)';
                 break;
+            case 'Number':
             case 'Decimal':
                 s =  'NUMBER';
                 if ((field.size) && (field.scale)) {
