@@ -3,7 +3,7 @@ const oracledb = require('oracledb');
 const async =  require('async');
 const util = require('util');
 const _ = require('lodash');
-const {SqlFormatter, SqlUtils, QueryField} = require('@themost/query');
+const {SqlFormatter, SqlUtils, QueryField, QueryExpression} = require('@themost/query');
 const {TraceUtils,LangUtils}  = require('@themost/common');
 
 
@@ -14,6 +14,18 @@ function zeroPad(number, length) {
         res = '0' + res;
     }
     return res;
+}
+
+function instanceOf(any, ctor) {
+    // validate constructor
+    if (typeof ctor !== 'function') {
+        return false
+    }
+    // validate with instanceof
+    if (any instanceof ctor) {
+        return true;
+    }
+    return !!(any && any.constructor && any.constructor.name === ctor.name);
 }
 
 /**
@@ -160,7 +172,7 @@ class OracleAdapter {
                 s = 'NUMBER(3,0)';
                 break;
             case 'Number':
-                s = 'NUMBER(38,0)';
+                s = 'NUMBER(19,4)';
                 break;
             case 'Float':
                 s = 'NUMBER(19,4)';
@@ -1378,6 +1390,34 @@ class OracleFormatter extends SqlFormatter {
             return '';
         return 'REGEXP_LIKE(' + this.escape(p0) + ',\'' + this.escape(p1, true) + '\')';
     }
+
+    /**
+     * @deprecated Use $ifNull() instead
+     * @param {*} p0 
+     * @param {*} p1 
+     * @returns 
+     */
+    $ifnull(p0, p1) {
+        return this.$ifNull(p0, p1) ;
+    }
+
+    $ifNull(p0, p1) {
+        return util.format('NVL(%s, %s)', this.escape(p0), this.escape(p1)) ;
+    }
+
+    $cond(ifExpr, thenExpr, elseExpr) {
+        // validate ifExpr which should an instance of QueryExpression or a comparison expression
+        var ifExpression;
+        if (instanceOf(ifExpr, QueryExpression)) {
+            ifExpression = this.formatWhere(ifExpr.$where);
+        } else if (this.isComparison(ifExpr)) {
+            ifExpression = this.formatWhere(ifExpr);
+        } else {
+            throw new Error('Condition parameter should be an instance of query or comparison expression');
+        }
+        return util.format('(CASE WHEN %s THEN %s ELSE %s END)', ifExpression, this.escape(thenExpr), this.escape(elseExpr));
+    }
+
 }
 
 OracleFormatter.NAME_FORMAT = '"$1"';
