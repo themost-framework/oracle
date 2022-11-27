@@ -487,20 +487,28 @@ class OracleAdapter {
             },
             function(arg, cb) {
                 if (arg>0) {
-                    //log migration to database
-                    self.execute('INSERT INTO "migrations"("id","appliesTo", "model", "version", "description") VALUES ("migrations_id_seq".nextval,?,?,?,?)', [migration.appliesTo,
-                        migration.model,
-                        migration.version,
-                        migration.description ], function(err) {
-                        if (err)  {
+                    void self.selectIdentity('migrations', 'id', function(err, value) {
+                        if (err) {
                             return cb(err);
                         }
-                        cb(null, 1);
+                        //log migration to database
+                        void self.execute('INSERT INTO "migrations"("id","appliesTo", "model", "version", "description") VALUES (?,?,?,?,?)', [
+                            value,
+                            migration.appliesTo,
+                            migration.model,
+                            migration.version,
+                            migration.description 
+                        ], function(err) {
+                            if (err)  {
+                                return cb(err);
+                            }
+                            return cb(null, 1);
+                        });
                     });
                 }
                 else {
                     migration['updated'] = true;
-                    cb(null, arg);
+                    return cb(null, arg);
                 }
             }
         ], function(err) {
@@ -567,13 +575,13 @@ class OracleAdapter {
                 if (err) {
                     return callback(err);
                 }
-                const maxValue = results && results.length && results[0].maxValue;
+                const maxValue = (results && results.length && results[0].maxValue) + 1;
                 if (maxValue) {
                     let name = entity + '_' + attribute + '_seq';
                     if (name.length>30) {
                         name=entity.substring(0,26) + '_seq';
                     }
-                    sql = util.format('ALTER SEQUENCE "%s" RESTART START WITH %s', name, maxValue);
+                    sql = util.format('ALTER SEQUENCE "%s" RESTART START WITH %s INCREMENT BY 1', name, maxValue);
                     return self.execute(sql, [], function(err) {
                         if (err) {
                             return callback(err);
@@ -1414,6 +1422,10 @@ class OracleFormatter extends SqlFormatter {
             throw new Error('Condition parameter should be an instance of query or comparison expression');
         }
         return util.format('(CASE WHEN %s THEN %s ELSE %s END)', ifExpression, this.escape(thenExpr), this.escape(elseExpr));
+    }
+
+    $toString(p0) {
+        return util.format('TO_NCHAR(%s)', this.escape(p0)) ;
     }
 
 }
