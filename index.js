@@ -3,7 +3,7 @@ const oracledb = require('oracledb');
 const async =  require('async');
 const util = require('util');
 const _ = require('lodash');
-const {SqlFormatter, SqlUtils, QueryField} = require('@themost/query');
+const {SqlFormatter, SqlUtils, QueryField, QueryExpression} = require('@themost/query');
 const {TraceUtils,LangUtils}  = require('@themost/common');
 
 
@@ -14,6 +14,18 @@ function zeroPad(number, length) {
         res = '0' + res;
     }
     return res;
+}
+
+function instanceOf(any, ctor) {
+    // validate constructor
+    if (typeof ctor !== 'function') {
+        return false
+    }
+    // validate with instanceof
+    if (any instanceof ctor) {
+        return true;
+    }
+    return !!(any && any.constructor && any.constructor.name === ctor.name);
 }
 
 /**
@@ -159,9 +171,6 @@ class OracleAdapter {
             case 'Byte':
                 s = 'NUMBER(3,0)';
                 break;
-            case 'Number':
-                s = 'NUMBER(38,0)';
-                break;
             case 'Float':
                 s = 'NUMBER(19,4)';
                 break;
@@ -170,6 +179,7 @@ class OracleAdapter {
             case 'Currency':
                 s =  'NUMBER(' + (field.size || 19) + ',4)';
                 break;
+            case 'Number':
             case 'Decimal':
                 s =  'NUMBER';
                 if ((field.size) && (field.scale)) {
@@ -477,20 +487,28 @@ class OracleAdapter {
             },
             function(arg, cb) {
                 if (arg>0) {
-                    //log migration to database
-                    self.execute('INSERT INTO "migrations"("id","appliesTo", "model", "version", "description") VALUES ("migrations_id_seq".nextval,?,?,?,?)', [migration.appliesTo,
-                        migration.model,
-                        migration.version,
-                        migration.description ], function(err) {
-                        if (err)  {
+                    void self.selectIdentity('migrations', 'id', function(err, value) {
+                        if (err) {
                             return cb(err);
                         }
-                        cb(null, 1);
+                        //log migration to database
+                        void self.execute('INSERT INTO "migrations"("id","appliesTo", "model", "version", "description") VALUES (?,?,?,?,?)', [
+                            value,
+                            migration.appliesTo,
+                            migration.model,
+                            migration.version,
+                            migration.description 
+                        ], function(err) {
+                            if (err)  {
+                                return cb(err);
+                            }
+                            return cb(null, 1);
+                        });
                     });
                 }
                 else {
                     migration['updated'] = true;
-                    cb(null, arg);
+                    return cb(null, arg);
                 }
             }
         ], function(err) {
@@ -557,13 +575,13 @@ class OracleAdapter {
                 if (err) {
                     return callback(err);
                 }
-                const maxValue = results && results.length && results[0].maxValue;
+                const maxValue = (results && results.length && results[0].maxValue) + 1;
                 if (maxValue) {
                     let name = entity + '_' + attribute + '_seq';
                     if (name.length>30) {
                         name=entity.substring(0,26) + '_seq';
                     }
-                    sql = util.format('ALTER SEQUENCE "%s" RESTART START WITH %s', name, maxValue);
+                    sql = util.format('ALTER SEQUENCE "%s" RESTART START WITH %s INCREMENT BY 1', name, maxValue);
                     return self.execute(sql, [], function(err) {
                         if (err) {
                             return callback(err);
@@ -1238,6 +1256,16 @@ class OracleFormatter extends SqlFormatter {
         return sql;
 
     }
+    isLogical(obj) {
+        let prop;
+        for(let key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                prop = key;
+                break;
+            }
+        }
+        return (/^\$(and|or|not|nor)$/g.test(prop));
+    };
     /**
      * Implements [a & b] bitwise and expression formatter.
      * @param p0 {*}
@@ -1378,6 +1406,38 @@ class OracleFormatter extends SqlFormatter {
             return '';
         return 'REGEXP_LIKE(' + this.escape(p0) + ',\'' + this.escape(p1, true) + '\')';
     }
+
+    /**
+     * @deprecated Use $ifNull() instead
+     * @param {*} p0 
+     * @param {*} p1 
+     * @returns 
+     */
+    $ifnull(p0, p1) {
+        return this.$ifNull(p0, p1) ;
+    }
+
+    $ifNull(p0, p1) {
+        return util.format('NVL(%s, %s)', this.escape(p0), this.escape(p1)) ;
+    }
+
+    $cond(ifExpr, thenExpr, elseExpr) {
+        // validate ifExpr which should an instance of QueryExpression or a comparison expression
+        var ifExpression;
+        if (instanceOf(ifExpr, QueryExpression)) {
+            ifExpression = this.formatWhere(ifExpr.$where);
+        } else if (this.isComparison(ifExpr) || this.isLogical(ifExpr)) {
+            ifExpression = this.formatWhere(ifExpr);
+        } else {
+            throw new Error('Condition parameter should be an instance of query or comparison expression');
+        }
+        return util.format('(CASE WHEN %s THEN %s ELSE %s END)', ifExpression, this.escape(thenExpr), this.escape(elseExpr));
+    }
+
+    $toString(p0) {
+        return util.format('TO_NCHAR(%s)', this.escape(p0)) ;
+    }
+
 }
 
 OracleFormatter.NAME_FORMAT = '"$1"';
