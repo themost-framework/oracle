@@ -1256,6 +1256,16 @@ class OracleFormatter extends SqlFormatter {
         return sql;
 
     }
+    isLogical(obj) {
+        let prop;
+        for(let key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                prop = key;
+                break;
+            }
+        }
+        return (/^\$(and|or|not|nor)$/g.test(prop));
+    };
     /**
      * Implements [a & b] bitwise and expression formatter.
      * @param p0 {*}
@@ -1416,7 +1426,7 @@ class OracleFormatter extends SqlFormatter {
         var ifExpression;
         if (instanceOf(ifExpr, QueryExpression)) {
             ifExpression = this.formatWhere(ifExpr.$where);
-        } else if (this.isComparison(ifExpr)) {
+        } else if (this.isComparison(ifExpr) || this.isLogical(ifExpr)) {
             ifExpression = this.formatWhere(ifExpr);
         } else {
             throw new Error('Condition parameter should be an instance of query or comparison expression');
