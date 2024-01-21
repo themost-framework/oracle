@@ -1,6 +1,6 @@
 {
   "name": "@themost/oracle",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "MOST Web Framework Oracle Data Adapter",
   "main": "index.js",
   "scripts": {
@@ -30,7 +30,7 @@
   "dependencies": {
     "async": "^1.5.2",
     "lodash": "^4.17.4",
-    "oracledb": "^4.0.0"
+    "oracledb": "^6.3.0"
   },
   "peerDependencies": {
     "@themost/common": "^2.1.6",
