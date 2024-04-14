@@ -82,10 +82,42 @@ class OracleAdapter {
                     password      : this.options.password,
                     connectString : this.connectString
                 }, function(err, connection) {
-                    if (err) { return callback(err); }
-                    TraceUtils.debug('Open database connection');
+                    if (err) {
+                        return callback(err);
+                    }
                     self.rawConnection = connection;
-                    callback();
+                    if (self.options.session) {
+                        const executeOptions = {outFormat: oracledb.OBJECT, autoCommit: (typeof self.transaction === 'undefined') };
+                        let sqls = [];
+                        try {
+                            //set session parameters
+                            const session = self.options.session;
+                            const keys = Object.keys(session);
+                            if (keys.length === 0) {
+                                return callback();
+                            }
+                            const formatter = new OracleFormatter();
+                            sqls.push.apply(sqls, keys.map((key) => {
+                                return 'ALTER session SET ' + formatter.escapeName(key) + '=' + formatter.escape(session[key])
+                            }));
+                        } catch (error) {
+                            return callback(error);
+                        }
+                        return async.eachSeries(sqls , function(sql, cb) {
+                            self.rawConnection.execute(sql, [], executeOptions, function(err) {
+                                if (err) {
+                                    return cb(err);
+                                }
+                                return cb();
+                            });
+                        }, function(err) {
+                            if (err) {
+                                return callback(err);
+                            }
+                            return callback();
+                        });
+                    }
+                    return callback();
                 });
         }
     }
@@ -934,6 +966,7 @@ class OracleAdapter {
             view = matches[2];
         }
         else {
+            // eslint-disable-next-line no-unused-vars
             view = name;
             //get schema name (from options)
             if (self.options && self.options.schema) {
@@ -1039,6 +1072,17 @@ class OracleAdapter {
     }
 
     /**
+     * @param {function} callback 
+     */
+    tryClose(callback) {
+        // if an active transaction exists, do not close the connection
+        if (this.transaction) {
+            return callback();
+        }
+        return this.close(callback);
+    }
+
+    /**
      * Executes a query against the underlying database
      * @param query {QueryExpression|string|*}
      * @param values {*=}
@@ -1060,39 +1104,35 @@ class OracleAdapter {
             }
             //validate sql statement
             if (typeof sql !== 'string') {
-                callback.call(self, new Error('The executing command is of the wrong type or empty.'));
+                callback(new Error('The executing command is of the wrong type or empty.'));
                 return;
             }
             //ensure connection
             self.open(function(err) {
                 if (err) {
-                    callback.call(self, err);
+                    return callback(err);
                 }
-                else {
-                    //log statement (optional)
-                    if (process.env.NODE_ENV==='development')
-                        TraceUtils.log(util.format('SQL:%s, Parameters:%s', sql, JSON.stringify(values)));
-                    //prepare statement - the traditional way
-                    const prepared = self.prepare(sql, values);
-                    //execute raw command
-                    self.rawConnection.execute(prepared,[], {outFormat: oracledb.OBJECT, autoCommit: (typeof self.transaction === 'undefined') }, function(err, result) {
+                //log statement (optional)
+                TraceUtils.debug(util.format('SQL:%s, Parameters:%s', sql, JSON.stringify(values)));
+                //prepare statement - the traditional way
+                const prepared = self.prepare(sql, values);
+                //execute raw command
+                self.rawConnection.execute(prepared,[], {outFormat: oracledb.OBJECT, autoCommit: (typeof self.transaction === 'undefined') }, function(err, result) {
+                    self.tryClose(function() {
                         if (err) {
-                            //log sql
                             TraceUtils.log(util.format('SQL Error:%s', prepared));
-                            callback(err);
+                            return callback(err);
                         }
-                        else {
-                            if (result)
-                                callback(null, result.rows);
-                            else
-                                callback();
+                        if (result) {
+                            return callback(null, result.rows);
                         }
+                        return callback();
                     });
-                }
+                });
             });
         }
-        catch (e) {
-            callback.call(self, e);
+        catch (error) {
+            callback(error);
         }
     }
 
@@ -1258,6 +1298,7 @@ class OracleFormatter extends SqlFormatter {
     }
     isLogical(obj) {
         let prop;
+        // eslint-disable-next-line no-unused-vars
         for(let key in obj) {
             if (Object.prototype.hasOwnProperty.call(obj, key)) {
                 prop = key;
@@ -1265,7 +1306,7 @@ class OracleFormatter extends SqlFormatter {
             }
         }
         return (/^\$(and|or|not|nor)$/g.test(prop));
-    };
+    }
     /**
      * Implements [a & b] bitwise and expression formatter.
      * @param p0 {*}
@@ -1423,7 +1464,7 @@ class OracleFormatter extends SqlFormatter {
 
     $cond(ifExpr, thenExpr, elseExpr) {
         // validate ifExpr which should an instance of QueryExpression or a comparison expression
-        var ifExpression;
+        let ifExpression;
         if (instanceOf(ifExpr, QueryExpression)) {
             ifExpression = this.formatWhere(ifExpr.$where);
         } else if (this.isComparison(ifExpr) || this.isLogical(ifExpr)) {
