@@ -276,7 +276,7 @@ class OracleAdapter {
         try {
             // ensure parameters
             if (typeof executeFunc !== 'function') {
-                throw new Error('Invalid argument. Expected a valid function which is going to be executed in transaction.');
+                throw new Error('Invalid argument. Expected a valid function that is going to be executed in transaction.');
             }
             callback = callback || function() {};
             return self.open(function(err) {
