@@ -1110,35 +1110,31 @@ class OracleAdapter {
         const self = this;
         let sql = null;
         try {
-
             if (typeof query === 'string') {
-                //get raw sql statement
+                // get raw sql statement
                 sql = query;
-            }
-            else {
-                //format query expression or any object that may be act as query expression
+            } else {
+                // format query expression or any object that may be act as query expression
                 const formatter = new OracleFormatter();
                 sql = formatter.format(query);
             }
-            //validate sql statement
+            // validate sql statement
             if (typeof sql !== 'string') {
-                callback(new Error('The executing command is of the wrong type or empty.'));
-                return;
+                throw new Error('The executing command is of the wrong type or empty.');
             }
-            //ensure connection
+            // ensure connection
             self.open(function(err) {
                 if (err) {
                     return callback(err);
                 }
-                //log statement (optional)
-                TraceUtils.debug(util.format('SQL:%s, Parameters:%s', sql, JSON.stringify(values)));
-                //prepare statement - the traditional way
+                // prepare statement - the traditional way
                 const prepared = self.prepare(sql, values);
-                //execute raw command
+                TraceUtils.debug(`SQL ${prepared}`);
+                // execute raw command
                 self.rawConnection.execute(prepared,[], {outFormat: oracledb.OBJECT, autoCommit: (typeof self.transaction === 'undefined') }, function(err, result) {
                     self.tryClose(function() {
                         if (err) {
-                            TraceUtils.log(util.format('SQL Error:%s', prepared));
+                            TraceUtils.error(`SQL Error ${prepared}`);
                             return callback(err);
                         }
                         if (result) {
@@ -1150,7 +1146,9 @@ class OracleAdapter {
             });
         }
         catch (error) {
-            callback(error);
+            return self.tryClose(function() {
+                return callback(error);
+            });
         }
     }
 
