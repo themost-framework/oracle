@@ -268,46 +268,64 @@ class OracleAdapter {
 
     /**
      * Begins a transactional operation by executing the given function
-     * @param fn {function} The function to execute
+     * @param executeFunc {function} The function to execute
      * @param callback {function(Error=)} The callback that contains the error -if any- and the results of the given operation
      */
-    executeInTransaction(fn, callback) {
+    executeInTransaction(executeFunc, callback) {
         const self = this;
-        //ensure parameters
-        fn = fn || function() {}; callback = callback || function() {};
-        self.open(function(err) {
-            if (err) {
-                callback(err);
+        try {
+            // ensure parameters
+            if (typeof executeFunc !== 'function') {
+                throw new Error('Invalid argument. Expected a valid function which is going to be executed in transaction.');
             }
-            else {
+            callback = callback || function() {};
+            return self.open(function(err) {
+                if (err) {
+                    // throw error
+                    return callback(err);
+                }
+                // check if transaction is already open
                 if (self.transaction) {
-                    fn.call(self, function(err) {
+                    // and execute function
+                    return executeFunc.call(self, function(err) {
                         callback(err);
                     });
                 }
-                else {
-                    //initialize dummy transaction object (for future use)
-                    self.transaction = { };
-                    //execute function
-                    fn.call(self, function(err) {
-                        if (err) {
-                            //rollback transaction
-                            self.rawConnection.rollback(function() {
-                                delete self.transaction;
-                                callback(err);
+                // initialize dummy transaction object (for future use)
+                self.transaction = { };
+                // execute function
+                return executeFunc.call(self, function(err) {
+                    if (err) {
+                        // rollback transaction
+                        return self.rawConnection.rollback(function() {
+                            // delete transaction object
+                            delete self.transaction;
+                            // use auto-close
+                            return self.tryClose(function() {
+                                // return error
+                                return callback(err);
                             });
-                        }
-                        else {
-                            //commit transaction
-                            self.rawConnection.commit(function(err) {
-                                delete self.transaction;
-                                callback(err);
-                            });
-                        }
+                        });
+                    }
+                    // commit transaction
+                    return self.rawConnection.commit(function(err) {
+                        // delete transaction object
+                        delete self.transaction;
+                        // use auto-close
+                        return self.tryClose(function() {
+                            return callback(err);
+                        });
                     });
-                }
+                });
+            });
+        } catch (error) {
+            if (self.transaction) {
+                return callback(error);
             }
-        });
+            return self.tryClose(function() {
+                return callback(error);
+            });
+        }
     }
 
     /**
