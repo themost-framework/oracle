@@ -1093,11 +1093,7 @@ class OracleAdapter {
      * @param {function} callback 
      */
     tryClose(callback) {
-        // if an active transaction exists, do not close the connection
-        if (this.transaction) {
-            return callback();
-        }
-        return this.close(callback);
+        return callback();
     }
 
     /**
