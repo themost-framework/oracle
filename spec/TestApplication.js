@@ -212,9 +212,12 @@ class TestApplication extends DataApplication {
                                     await context.db.executeAsync(`DELETE FROM "${model.sourceAdapter}" WHERE 1=1`, []);
                                     const formatter = new OracleFormatter();
                                     // get columns of type boolean
-                                    // data should be update to true/false
+                                    // data should be updated to true/false
                                     // because of an error occurred while trying to insert an integer value to a field of type boolean
                                     const booleanAttributes = model.attributes.filter((attribute) => attribute.type === 'Boolean');
+                                    let total = results.length;
+                                    let index = 0;
+                                    TraceUtils.log(`Importing ${total} records from ${model.sourceAdapter}`);
                                     for (let result of results) {
                                         // modify data
                                         booleanAttributes.forEach((attribute) => {
@@ -225,11 +228,29 @@ class TestApplication extends DataApplication {
                                         const sql = formatter.format(new QueryExpression().insert(result).into(model.sourceAdapter));
                                         // and execute
                                         await context.db.executeAsync(sql, []);
+                                        index++;
+                                        if (index % 50 === 0) {
+                                            TraceUtils.log(`Imported ${index} of ${total} records from ${model.sourceAdapter}`);
+                                        }
+                                    }
+                                    if (total > 0) {
+                                        TraceUtils.log(`Imported ${total} of ${total} records from ${model.sourceAdapter}`);
                                     }
                                     const key = model.getAttribute(model.primaryKey);
                                     if (key.type === 'Counter') {
-                                        // reset sequence
-                                        await context.db.executeAsync(`select setval(pg_get_serial_sequence('"${model.sourceAdapter}"', '${key.name}'), (select max("${key.name}") from "${model.sourceAdapter}")); `);
+                                        /**
+                                         * @type {Array<{count: number}>}
+                                         */
+                                        const [sequence] = await context.db.executeAsync(`SELECT COUNT(*) AS "count" FROM user_sequences WHERE sequence_name = '${model.sourceAdapter}_${key.name}_seq'`);
+                                        if (sequence.count > 0) {
+                                            const sql = `SELECT MAX("${key.name}") AS "lastVal" FROM "${model.sourceAdapter}"`;
+                                            /**
+                                             * @type {Array<{lastVal: number}>}
+                                             */
+                                            const [result] = await context.db.executeAsync(sql);
+                                            // reset sequence
+                                            await context.db.executeAsync(`ALTER SEQUENCE "${model.sourceAdapter}_${key.name}_seq" restart start with ${result.lastVal}`);
+                                        }
                                     }
                                 }
                             }

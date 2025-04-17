@@ -6,4 +6,4 @@ TraceUtils.useLogger(new JsonLogger({
     format: 'raw'
 }));
 /* global jest */
-jest.setTimeout(30000);
+jest.setTimeout(600000);

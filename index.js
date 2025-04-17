@@ -1376,7 +1376,9 @@ class OracleFormatter extends SqlFormatter {
      */
     // eslint-disable-next-line no-unused-vars
     $row_index(p0) {
-        let args = Array.prototype.slice.call(arguments);
+        let args = Array.from(arguments).filter(function(x) {
+            return x != null;
+        });
         return util.format('ROW_NUMBER() OVER(%s)', (args && args.length) ? this.format(args, '%o') : 'ORDER BY NULL');
     }
 
