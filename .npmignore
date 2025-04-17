@@ -1,7 +1,16 @@
 node_modules
 .idea
 .DS_STORE
-spec
+
+# github
 .github
+
+# eslint
 .eslintrc
 .eslintignore
+
+# test
+spec
+jest.config.js
+babel.config.js
+jsconfig.json

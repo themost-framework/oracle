@@ -80,3 +80,5 @@ export declare class OracleAdapter {
 
 export declare class OracleFormatter extends SqlFormatter {
 }
+
+export declare function createInstance(options: any): OracleAdapter;

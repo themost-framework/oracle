@@ -30,7 +30,7 @@ function instanceOf(any, ctor) {
 
 /**
  * @class
- * @augments DataAdapter
+ * @augments {import('@themost/common').DataAdapterBase}
  * @property {string} connectString
  */
 class OracleAdapter {
@@ -146,7 +146,7 @@ class OracleAdapter {
                 //close connection
                 self.rawConnection.release(function(err) {
                     if (err) {
-                        TraceUtils.debug('An error occured while closing database connection.');
+                        TraceUtils.debug('An error occurred while closing database connection.');
                         TraceUtils.debug(err);
                     }
                     TraceUtils.debug('Close database connection');
@@ -162,7 +162,7 @@ class OracleAdapter {
 
         }
         catch (err) {
-            TraceUtils.debug('An error occured while closing database connection');
+            TraceUtils.debug('An error occurred while closing database connection');
             TraceUtils.debug(err);
             //call callback without error
             callback();
@@ -1110,7 +1110,7 @@ class OracleAdapter {
                 // get raw sql statement
                 sql = query;
             } else {
-                // format query expression or any object that may be act as query expression
+                // format query expression or any object that may be acted as query expression
                 const formatter = new OracleFormatter();
                 sql = formatter.format(query);
             }
