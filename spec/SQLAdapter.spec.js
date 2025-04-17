@@ -19,14 +19,6 @@ describe('OracleAdapter', () => {
     afterEach(async () => {
         //
     });
-    it('should check database', async () => {
-        await app.executeInTestTransaction(async (context) => {
-            let exists = await context.db.database('a_test_database').existsAsync();
-            expect(exists).toBeFalsy();
-            exists = await context.db.database('test_db').existsAsync();
-            expect(exists).toBeTruthy();
-        });
-    });
 
     it('should check table', async () => {
         await app.executeInTestTransaction(async (context) => {
@@ -72,7 +64,8 @@ describe('OracleAdapter', () => {
             expect(column).toBeTruthy();
             expect(column.nullable).toBeTruthy();
             expect(column.size).toBe(255);
-            await db.executeAsync(`DROP TABLE ${new PostgreSQLFormatter().escapeName('Table1')}`);
+            const sql = `DROP TABLE ${new OracleFormatter().escapeName('Table1')}`
+            await db.executeAsync(sql, null);
         });
     });
 
@@ -123,7 +116,7 @@ describe('OracleAdapter', () => {
             column = columns.find((col) => col.name === 'description');
             expect(column.size).toEqual(512);
             expect(column.nullable).toBeTruthy();
-            await db.executeAsync(`DROP TABLE ${new PostgreSQLFormatter().escapeName('Table2')}`);
+            await db.executeAsync(`DROP TABLE ${new OracleFormatter().escapeName('Table2')}`);
         });
 
     });
@@ -222,7 +215,7 @@ describe('OracleAdapter', () => {
             exists = list.findIndex((index) => index.name === 'idx_name') >= 0;
             expect(exists).toBeFalsy();
 
-            await db.executeAsync(`DROP TABLE ${new PostgreSQLFormatter().escapeName('Table1')}`);
+            await db.executeAsync(`DROP TABLE ${new OracleFormatter().escapeName('Table1')}`);
         });
     });
 

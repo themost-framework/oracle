@@ -368,7 +368,7 @@ class OracleAdapter {
         callback = callback || function() {};
         if (typeof obj === 'undefined' || obj === null) { callback(); return; }
         /**
-         * @type {DataModelMigration|*}
+         * @type {*}
          */
         const migration = obj;
 
@@ -411,18 +411,6 @@ class OracleAdapter {
                     OracleAdapter.supportMigrations=true;
                     return cb(null, 0);
                 });
-
-                //self.execute('CREATE TABLE "migrations"("id" NUMBER(10) NOT NULL, ' +
-                //    '"appliesTo" NVARCHAR2(255) NOT NULL, "model" NVARCHAR2(255) NULL, ' +
-                //    '"description" NVARCHAR2(255),"version" NVARCHAR2(24) NOT NULL, ' +
-                //    'CONSTRAINT "migrations_pk" PRIMARY KEY ("id")); ' +
-                //    'CREATE SEQUENCE "migrations_seq" START WITH 1 INCREMENT BY 1; ' +
-                //    'CREATE TRIGGER "migrations_auto_inc" BEFORE INSERT ON "migrations" FOR EACH ROW BEGIN :new."id" := "migrations_seq".nextval; END;',
-                //    [], function(err) {
-                //        if (err) { cb(err); return; }
-                //        OracleAdapter.supportMigrations=true;
-                //        cb(null, 0);
-                //    });
             },
             //3. Check if migration has already been applied (true=Table version is equal to migration version, false=Table version is older from migration version)
             function(arg, cb) {
@@ -959,7 +947,7 @@ class OracleAdapter {
             },
             changeAsync: function (fields) {
                 return new Promise((resolve, reject) => {
-                    this.add(fields, (err, res) => {
+                    this.change(fields, (err, res) => {
                         if (err) {
                             return reject(err);
                         }
