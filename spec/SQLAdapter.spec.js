@@ -9,7 +9,6 @@ describe('OracleAdapter', () => {
     let app;
     beforeAll(async () => {
         app = new TestApplication(__dirname);
-        await app.tryCreateDatabase();
     });
     beforeEach(async () => {
         //

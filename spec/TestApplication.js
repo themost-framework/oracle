@@ -1,5 +1,5 @@
 // eslint-disable-next-line no-unused-vars
-import {DataApplication, DataConfigurationStrategy, NamedDataContext, DataCacheStrategy, DataContext, ODataModelBuilder, ODataConventionModelBuilder} from '@themost/data';
+import {DataApplication, DataConfigurationStrategy, DataCacheStrategy, DataContext, ODataModelBuilder, ODataConventionModelBuilder} from '@themost/data';
 import { createInstance, OracleFormatter } from '../index';
 import { TraceUtils, LangUtils } from '@themost/common';
 import { QueryExpression } from '@themost/query';
@@ -10,27 +10,10 @@ const testConnectionOptions = {
     'server': process.env.DB_HOST,
     'port': parseInt(process.env.DB_PORT, 10),
     'user': process.env.DB_USER,
-    'database': 'test_db'
+    'password': process.env.DB_PASSWORD,
+    'service': process.env.DB_SERVICE
 };
 
-if (process.env.DB_PASSWORD) {
-    Object.assign(testConnectionOptions, {
-        password: process.env.DB_PASSWORD
-    });
-}
-
-const masterConnectionOptions = {
-    'server': process.env.DB_HOST,
-    'port': parseInt(process.env.DB_PORT, 10),
-    'user': process.env.DB_USER,
-    'database': 'postgres'
-};
-
-if (process.env.DB_PASSWORD) {
-    Object.assign(masterConnectionOptions, {
-        password: process.env.DB_PASSWORD
-    });
-}
 
 const sourceConnectionOptions = {
     database: path.resolve(__dirname, 'db/local.db')
@@ -54,35 +37,18 @@ class TestApplication extends DataApplication {
         const dataConfiguration = this.configuration.getStrategy(DataConfigurationStrategy);
         // add adapter type
         const name = 'Oracle Data Adapter';
-        const invariantName = 'postgres';
+        const invariantName = 'oracle';
         dataConfiguration.adapterTypes.set(invariantName, {
             name,
             invariantName,
             createInstance
         });
         dataConfiguration.adapters.push({
-            name: 'master',
-            invariantName: 'postgres',
-            default: false,
-            options: masterConnectionOptions
-        });
-        dataConfiguration.adapters.push({
             name: 'test',
-            invariantName: 'postgres',
+            invariantName: 'oracle',
             default: true,
             options: testConnectionOptions
         });
-    }
-    async tryCreateDatabase() {
-        let context = new NamedDataContext('master');
-        context.getConfiguration = () => {
-            return this.configuration;
-        };
-        const exists = await context.db.database(testConnectionOptions.database).existsAsync();
-        if (exists === false) {
-            await context.db.executeAsync(`CREATE DATABASE ${testConnectionOptions.database};`);
-        }
-        await context.db.closeAsync();
     }
 
     async finalize() {
@@ -174,6 +140,7 @@ class TestApplication extends DataApplication {
             const builder = this.configuration.getStrategy(ODataModelBuilder);
             const schema = await builder.getEdm();
             const entityTypes = schema.entityType.filter((item) => {
+                // noinspection RedundantConditionalExpressionJS,JSUnresolvedReference
                 return item.abstract ? false : true;
             });
             await context.executeInTransactionAsync(async () => {
@@ -212,7 +179,7 @@ class TestApplication extends DataApplication {
             if (exists1 === true) {
                 const alreadyApplied = await context.db.executeAsync(
                     new QueryExpression().select('version').from('migrations')
-                        .where('appliesTo').equal('SetData').and('version').equal('1.0')
+                        .where('appliesTo').equal('SetData').and('version').equal('1.0'), []
                     );
                 if (alreadyApplied.length > 0) {
                     return;
@@ -221,6 +188,7 @@ class TestApplication extends DataApplication {
             const builder = this.configuration.getStrategy(ODataModelBuilder);
             const schema = await builder.getEdm();
             const entityTypes = schema.entityType.filter((item) => {
+                // noinspection RedundantConditionalExpressionJS,JSUnresolvedReference
                 return item.abstract ? false : true;
             });
             const sourceAdapter = new SqliteAdapter(sourceConnectionOptions);
@@ -239,9 +207,9 @@ class TestApplication extends DataApplication {
                             const sourceTableExists = await sourceAdapter.table(model.sourceAdapter).existsAsync();
                             if (sourceTableExists) {
                                 // get source data
-                                let results = await sourceAdapter.executeAsync(`SELECT * FROM "${model.sourceAdapter}"`);
+                                let results = await sourceAdapter.executeAsync(`SELECT * FROM "${model.sourceAdapter}"`, []);
                                 if (results.length > 0) {
-                                    await context.db.executeAsync(`DELETE FROM "${model.sourceAdapter}" WHERE 1=1`);
+                                    await context.db.executeAsync(`DELETE FROM "${model.sourceAdapter}" WHERE 1=1`, []);
                                     const formatter = new OracleFormatter();
                                     // get columns of type boolean
                                     // data should be update to true/false
@@ -256,7 +224,7 @@ class TestApplication extends DataApplication {
                                         });
                                         const sql = formatter.format(new QueryExpression().insert(result).into(model.sourceAdapter));
                                         // and execute
-                                        await context.db.executeAsync(sql);
+                                        await context.db.executeAsync(sql, []);
                                     }
                                     const key = model.getAttribute(model.primaryKey);
                                     if (key.type === 'Counter') {
