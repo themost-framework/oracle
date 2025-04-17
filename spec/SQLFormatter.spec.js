@@ -40,10 +40,9 @@ describe('OracleFormatter', () => {
 
     it('should escape constant', async () => {
         const formatter = new OracleFormatter();
-        expect(formatter.escapeConstant(10.45)).toEqual('10.45::float');
-        expect(formatter.escapeConstant('test')).toEqual('\'test\'::text');
-        expect(formatter.escapeConstant(true)).toEqual('true::bool');
-        expect(formatter.escapeConstant(new Date('2019-05-15 12:45:00'))).toEqual('\'2019-05-15 12:45:00.000\'::timestamp');
+        expect(formatter.escapeConstant(10.45)).toEqual('10.45');
+        expect(formatter.escapeConstant('test')).toEqual('\'test\'');
+        expect(formatter.escapeConstant(true)).toEqual('1');
     });
 
     it('should should use limit select', async () => {

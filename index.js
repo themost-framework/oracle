@@ -1481,6 +1481,30 @@ class OracleFormatter extends SqlFormatter {
         return util.format('TO_NCHAR(%s)', this.escape(p0)) ;
     }
 
+    $uuid() {
+        return 'REGEXP_REPLACE(SYS_GUID(), \'(.{8})(.{4})(.{4})(.{4})(.{12})\', \'\\1-\\2-\\3-\\4-\\5\')';
+    }
+
+    /**
+     *
+     * @param {('date'|'datetime'|'timestamp')} type
+     * @returns
+     */
+    $getDate(type) {
+        switch (type) {
+            case 'date':
+                return 'TRUNC(SYSDATE)';
+            case 'datetime':
+                return 'SYSDATE';
+            case 'timestamp':
+                return 'CAST(SYSDATE AS TIMESTAMP WITH LOCAL TIME ZONE)';
+            default:
+                return 'CAST(SYSDATE AS TIMESTAMP WITH LOCAL TIME ZONE)';
+        }
+    }
+
+
+
 }
 
 OracleFormatter.NAME_FORMAT = '"$1"';

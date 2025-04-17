@@ -1,6 +1,6 @@
 import { QueryEntity, QueryExpression, QueryField } from '@themost/query';
 import { TestApplication } from './TestApplication';
-import { PostgreSQLFormatter as SqlFormatter } from '../src';
+import { OracleFormatter as SqlFormatter } from '../index';
 import { Guid } from '@themost/common';
 import { round } from 'mathjs';
 import moment from 'moment/moment';
