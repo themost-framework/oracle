@@ -24,7 +24,7 @@ describe('DateFunctions', () => {
         await app.executeInTestTransaction(async (context) => {
             let items = await context.model('Order')
                 .asQueryable().where('orderDate').getDate().equal('2019-04-15').silent().getItems();
-            expect(items).toBeInstanceOf(Array);
+            expect(Array.isArray(items)).toBeTruthy();
             expect(items.length).toBeGreaterThan(0);
             for (const item of items) {
                 expect(item.orderDate.getDate()).toEqual(15);
@@ -38,7 +38,7 @@ describe('DateFunctions', () => {
         await app.executeInTestTransaction(async (context) => {
             let items = await context.model('Order')
                 .asQueryable().where('orderDate').getDay().equal(15).silent().getItems();
-            expect(items).toBeInstanceOf(Array);
+            expect(Array.isArray(items)).toBeTruthy();
             expect(items.length).toBeGreaterThan(0);
             for (const item of items) {
                 expect(item.orderDate.getDate()).toEqual(15);
@@ -50,7 +50,7 @@ describe('DateFunctions', () => {
         await app.executeInTestTransaction(async (context) => {
             let items = await context.model('Order')
                 .asQueryable().where('orderDate').getMonth().equal(4).silent().getItems();
-            expect(items).toBeInstanceOf(Array);
+            expect(Array.isArray(items)).toBeTruthy();
             expect(items.length).toBeGreaterThan(0);
             for (const item of items) {
                 expect(item.orderDate.getMonth()).toEqual(3);
@@ -62,7 +62,7 @@ describe('DateFunctions', () => {
         await app.executeInTestTransaction(async (context) => {
             let items = await context.model('Order')
                 .asQueryable().where('orderDate').getFullYear().equal(2019).silent().getItems();
-            expect(items).toBeInstanceOf(Array);
+            expect(Array.isArray(items)).toBeTruthy();
             expect(items.length).toBeGreaterThan(0);
             for (const item of items) {
                 expect(item.orderDate.getFullYear()).toEqual(2019);
@@ -74,7 +74,7 @@ describe('DateFunctions', () => {
         await app.executeInTestTransaction(async (context) => {
             let items = await context.model('Order')
                 .asQueryable().where('orderDate').getHours().equal(14).silent().getItems();
-            expect(items).toBeInstanceOf(Array);
+            expect(Array.isArray(items)).toBeTruthy();
             expect(items.length).toBeGreaterThan(0);
             for (const item of items) {
                 expect(item.orderDate.getHours()).toEqual(14);
@@ -86,7 +86,7 @@ describe('DateFunctions', () => {
         await app.executeInTestTransaction(async (context) => {
             let items = await context.model('Order')
                 .asQueryable().where('orderDate').getMinutes().equal(45).silent().getItems();
-            expect(items).toBeInstanceOf(Array);
+            expect(Array.isArray(items)).toBeTruthy();
             expect(items.length).toBeGreaterThan(0);
             for (const item of items) {
                 expect(item.orderDate.getMinutes()).toEqual(45);
@@ -98,7 +98,7 @@ describe('DateFunctions', () => {
         await app.executeInTestTransaction(async (context) => {
             let items = await context.model('Order')
                 .asQueryable().where('orderDate').getSeconds().equal(45).silent().getItems();
-            expect(items).toBeInstanceOf(Array);
+            expect(Array.isArray(items)).toBeTruthy();
             expect(items.length).toBeGreaterThan(0);
             for (const item of items) {
                 expect(item.orderDate.getSeconds()).toEqual(45);

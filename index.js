@@ -276,6 +276,7 @@ class OracleAdapter {
         try {
             // ensure parameters
             if (typeof executeFunc !== 'function') {
+                // noinspection ExceptionCaughtLocallyJS
                 throw new Error('Invalid argument. Expected a valid function that is going to be executed in transaction.');
             }
             callback = callback || function() {};
@@ -1077,6 +1078,183 @@ class OracleAdapter {
         };
     }
 
+    indexes(name) {
+
+        const self = this, formatter = this.getFormatter();
+        let owner;
+        // eslint-disable-next-line no-unused-vars
+        let table;
+        const matches = /(\w+)\.(\w+)/.exec(name);
+        if (matches) {
+            //get schema owner
+            owner = matches[1];
+            //get table name
+            table = matches[2];
+        }
+        else {
+            // eslint-disable-next-line no-unused-vars
+            table = name;
+            // get schema name (from options)
+            if (self.options && self.options.schema) {
+                owner = self.options.schema;
+            }
+        }
+
+        if (owner == null) {
+            owner = self.options.user.toUpperCase();
+        }
+
+        return {
+            list: function (callback) {
+                /**
+                 * @property {Array<{name: string,type:string,columns:Array<string>}>} _indexes
+                 */
+                const thisArg = this;
+                if (Object.prototype.hasOwnProperty.call(thisArg, '_indexes')) {
+                    return callback(null, thisArg._indexes);
+                }
+                self.execute(`SELECT "indexes"."INDEX_NAME" AS "name", "indexes"."INDEX_TYPE" AS "type", "constraints"."CONSTRAINT_TYPE" AS "constraint" FROM USER_INDEXES "indexes" LEFT JOIN USER_CONSTRAINTS "constraints" ON "indexes"."INDEX_NAME" = "constraints"."INDEX_NAME" AND "indexes"."TABLE_NAME" = "constraints"."TABLE_NAME" AND "indexes"."TABLE_OWNER" = "constraints"."OWNER" WHERE "indexes".TABLE_NAME = ${formatter.escape(table)} AND "indexes"."TABLE_OWNER" = ${formatter.escape(owner)}`, null, function (err, result) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    const indexes = result.filter(function (x) {
+                        return x.constraint !== 'P'; // Exclude primary key constraints
+                    }).map(function (x) {
+                        return {
+                            name: x.name,
+                            columns: []
+                        };
+                    });
+                    self.execute(`SELECT "columns"."COLUMN_NAME" AS "name","columns"."INDEX_NAME" AS "index" FROM "USER_IND_COLUMNS" "columns" INNER JOIN "USER_INDEXES" "indexes" ON "indexes"."INDEX_NAME" = "columns"."INDEX_NAME" AND "indexes"."TABLE_NAME" = "columns"."TABLE_NAME" WHERE "indexes"."TABLE_NAME" = ${formatter.escape(table)} AND "indexes"."TABLE_OWNER" = ${formatter.escape(owner)}`, null, function (err, columns) {
+                        if (err) {
+                            return callback(err);
+                        }
+                        indexes.forEach(function (x) {
+                           x.columns = columns.filter((y) => {
+                               return y.index === x.name;
+                           }).map((y) => {
+                               return y.name;
+                           });
+                        });
+                        thisArg._indexes = indexes;
+                        return callback(null, indexes);
+                    });
+                });
+            },
+            listAsync: function() {
+                return new Promise((resolve, reject) => {
+                    this.list((err, results) => {
+                        if (err) {
+                            return reject(err);
+                        }
+                        return resolve(results);
+                    });
+                });
+            },
+            /**
+             * @param {string} name
+             * @param {Array|string} columns
+             * @param {Function} callback
+             */
+            create: function (name, columns, callback) {
+                const cols = [];
+                if (typeof columns === 'string') {
+                    cols.push(columns);
+                }
+                else if (Array.isArray(columns)) {
+                    cols.push.apply(cols, columns);
+                }
+                else {
+                    return callback(new Error('Invalid parameter. Columns parameter must be a string or an array of strings.'));
+                }
+                const thisArg = this;
+                void thisArg.list(function (err, indexes) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    const ix = indexes.find(function (x) { return x.name === name; });
+                    //format create index SQL statement
+                    const sqlCreateIndex = `CREATE INDEX ${formatter.escapeName(name)} ON ${formatter.escapeName(table)}(${cols.map(function (x) { return formatter.escapeName(x); }).join(',')})`
+                    if (typeof ix === 'undefined' || ix === null) {
+                        return self.execute(sqlCreateIndex, [], (err, result) => {
+                            return callback(err, result)
+                        });
+                    }
+                    else {
+                        let nCols = cols.length;
+                        //enumerate existing columns
+                        ix.columns.forEach(function (x) {
+                            if (cols.indexOf(x) >= 0) {
+                                //column exists in index
+                                nCols -= 1;
+                            }
+                        });
+                        if (nCols > 0) {
+                            //drop index
+                            thisArg.drop(name, function (err) {
+                                if (err) {
+                                    return callback(err);
+                                }
+                                //and create it
+                                self.execute(sqlCreateIndex, [], callback);
+                            });
+                        }
+                        else {
+                            //do nothing
+                            return callback();
+                        }
+                    }
+                });
+            },
+            createAsync: function(name, columns) {
+                return new Promise((resolve, reject) => {
+                    this.create(name, columns, (err) => {
+                        if (err) {
+                            return reject(err);
+                        }
+                        return resolve();
+                    });
+                });
+            },
+            drop: function (name, callback) {
+                if (typeof name !== 'string') {
+                    return callback(new Error('Name must be a valid string.'));
+                }
+                void this.list(function (err, indexes) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    const exists = indexes.find(function (x) { return x.name === name; });
+                    if (exists == null) {
+                        return callback();
+                    }
+                    //format drop index SQL statement
+                    const sqlDropIndex = `DROP INDEX ${formatter.escapeName(name)}`;
+                    void self.execute(sqlDropIndex, null, function (err) {
+                        if (err) {
+                            return callback(err);
+                        }
+                        return callback();
+                    });
+                });
+            },
+            dropAsync: function(name) {
+                return new Promise((resolve, reject) => {
+                    this.drop(name, (err) => {
+                        if (err) {
+                            return reject(err);
+                        }
+                        return resolve();
+                    });
+                });
+            }
+        };
+    }
+
+    getFormatter() {
+        return new OracleFormatter();
+    }
+
     /**
      * @param {function} callback 
      */
@@ -1092,7 +1270,10 @@ class OracleAdapter {
      */
     execute(query, values, callback) {
         const self = this;
-        let sql = null;
+        /**
+         * @type {string}
+         */
+        let sql;
         try {
             if (typeof query === 'string') {
                 // get raw sql statement
@@ -1104,6 +1285,7 @@ class OracleAdapter {
             }
             // validate sql statement
             if (typeof sql !== 'string') {
+                // noinspection ExceptionCaughtLocallyJS
                 throw new Error('The executing command is of the wrong type or empty.');
             }
             // ensure connection
@@ -1187,9 +1369,9 @@ class OracleFormatter extends SqlFormatter {
         if (value instanceof Date) {
             return util.format('TO_TIMESTAMP_TZ(%s, \'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM\')', this.escapeDate(value));
         }
-        if (typeof value === 'string' && LangUtils.isDate(value)) {
-            return util.format('TO_TIMESTAMP_TZ(%s, \'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM\')', this.escapeDate(new Date(value)));
-        }
+        // if (typeof value === 'string' && LangUtils.isDate(value)) {
+        //     return util.format('TO_TIMESTAMP_TZ(%s, \'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM\')', this.escapeDate(new Date(value)));
+        // }
         let res = super.escape.bind(this)(value, unquoted);
         if (typeof value === 'string') {
             if (/\\'/g.test(res)) {
@@ -1324,6 +1506,10 @@ class OracleFormatter extends SqlFormatter {
      * @returns {string}
      */
     $indexof(p0, p1) {
+        return util.format('(INSTR(%s,%s)-1)', this.escape(p0), this.escape(p1));
+    }
+
+    $indexOf(p0, p1) {
         return util.format('(INSTR(%s,%s)-1)', this.escape(p0), this.escape(p1));
     }
 
@@ -1504,6 +1690,32 @@ class OracleFormatter extends SqlFormatter {
     }
 
 
+    $toInt(expr) {
+        return `CAST(${this.escape(expr)} AS INT)`;
+    }
+
+    $toDouble(expr) {
+        return this.$toDecimal(expr, 19, 8);
+    }
+
+    // noinspection JSCheckFunctionSignatures
+    /**
+     * @param {*} expr
+     * @param {number=} precision
+     * @param {number=} scale
+     * @returns
+     */
+    $toDecimal(expr, precision, scale) {
+        const p = typeof precision === 'number' ? Math.floor(precision) : 19;
+        const s = typeof scale === 'number' ? Math.floor(scale) : 8;
+        return `CAST(${this.escape(expr)} AS DECIMAL(${p},${s}))`;
+    }
+
+    $toLong(expr) {
+        return `CAST(${this.escape(expr)} AS NUMBER(19))`;
+    }
+
+
 
 }
 
@@ -1516,7 +1728,7 @@ const SLASH_ESCAPE = '\\';
 /**
  * Creates an instance of OracleAdapter object that represents an Oracle database connection.
  * @param {*} options An object that represents the properties of the underlying database connection.
- * @returns {DataAdapter|*}
+ * @returns {OracleAdapter}
  */
 function createInstance(options) {
     return new OracleAdapter(options);

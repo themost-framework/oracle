@@ -1,6 +1,7 @@
 
 // Copyright (c) 2017-2021, THEMOST LP. All rights reserved.
 import { SqlFormatter } from "@themost/query";
+import {DataAdapterIndexes} from "@themost/common";
 
 export declare interface OracleAdapterTable {
     create(fields: Array<any>, callback: (err: Error) => void): void;
@@ -17,20 +18,6 @@ export declare interface OracleAdapterTable {
     columnsAsync(): Promise<Array<any>>;
 }
 
-// export declare interface OracleAdapterIndex {
-//     name: string;
-//     columns: Array<string>;
-// }
-
-// export declare interface OracleAdapterIndexes {
-//     create(name: string, columns: Array<string>, callback: (err: Error, res?: number) => void): void;
-//     createAsync(name: string, columns: Array<string>): Promise<number>;
-//     drop(name: string, callback: (err: Error, res?: number) => void): void;
-//     dropAsync(name: string): Promise<number>;
-//     list(callback: (err: Error, res: Array<OracleAdapterIndex>) => void): void;
-//     listAsync(): Promise<Array<OracleAdapterIndex>>;
-// }
-
 export declare interface OracleAdapterView {
     create(query: any, callback: (err: Error) => void): void;
     createAsync(query: any): Promise<void>;
@@ -39,13 +26,6 @@ export declare interface OracleAdapterView {
     drop(callback: (err: Error) => void): void;
     dropAsync(): Promise<void>;
 }
-
-// export declare interface OracleAdapterDatabase {
-//     exists(callback: (err: Error, result: boolean) => void): void;
-//     existsAsync(): Promise<boolean>;
-//     create(callback: (err: Error) => void): void;
-//     createAsync(): Promise<void>;
-// }
 
 export declare interface OracleAdapterMigration {
     add: Array<any>;
@@ -74,8 +54,7 @@ export declare class OracleAdapter {
     view(name: string): OracleAdapterView;
     resetIdentity(entity: string, attribute: string, callback: (err: Error) => void): void;
     resetIdentityAsync(entity: string, attribute: string): Promise<void>;
-    // indexes(name: string): OracleAdapterIndexes;
-    // database(name: string): OracleAdapterDatabase;
+    indexes(name: string): DataAdapterIndexes;
 }
 
 export declare class OracleFormatter extends SqlFormatter {

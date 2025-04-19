@@ -14,6 +14,10 @@ const testConnectionOptions = {
     'service': process.env.DB_SERVICE
 };
 
+if (process.env.DB_SCHEMA) {
+    testConnectionOptions.schema = process.env.DB_SCHEMA;
+}
+
 
 const sourceConnectionOptions = {
     database: path.resolve(__dirname, 'db/local.db')

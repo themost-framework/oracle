@@ -1,5 +1,5 @@
 import {DataApplication, DataContext} from "@themost/data";
-import {DataAdapterTable, DataAdapterView} from "@themost/common";
+import {DataAdapterIndexes, DataAdapterTable, DataAdapterView} from "@themost/common";
 
 export declare class TestApplication extends DataApplication {
 
@@ -16,6 +16,7 @@ declare module "@themost/common" {
     export interface DataAdapterBase {
         table(name: string): DataAdapterTable;
         view(name: string): DataAdapterView;
+        indexes(name: string): DataAdapterIndexes;
         executeAsync(query: any, values?: any): Promise<any>;
     }
 }

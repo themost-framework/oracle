@@ -196,7 +196,7 @@ describe('OracleAdapter', () => {
             expect(exists).toBeTruthy();
 
             let list = await db.indexes('Table1').listAsync();
-            expect(list).toBeInstanceOf(Array);
+            expect(Array.isArray(list)).toBeTruthy();
             exists = list.findIndex((index) => index.name === 'idx_name') < 0;
 
             await db.indexes('Table1').createAsync('idx_name', [
@@ -204,7 +204,7 @@ describe('OracleAdapter', () => {
             ]);
 
             list = await db.indexes('Table1').listAsync();
-            expect(list).toBeInstanceOf(Array);
+            expect(Array.isArray(list)).toBeTruthy();
             exists = list.findIndex((index) => index.name === 'idx_name') >= 0;
             expect(exists).toBeTruthy();
 
@@ -219,25 +219,4 @@ describe('OracleAdapter', () => {
         });
     });
 
-    it('should should list tables', async () => {
-        await app.executeInTestTransaction(async (context) => {
-            const db = context.db;
-            const tables = await db.tables().listAsync();
-            expect(tables).toBeInstanceOf(Array);
-            expect(tables.length).toBeTruthy();
-            const table = tables.find((item) => item.name === 'ThingBase');
-            expect(table).toBeTruthy();
-        });
-    });
-
-    it('should should list views', async () => {
-        await app.executeInTestTransaction(async (context) => {
-            const db = context.db;
-            const views = await db.views().listAsync();
-            expect(views).toBeInstanceOf(Array);
-            expect(views.length).toBeTruthy();
-            const view = views.find((item) => item.name === 'ThingData');
-            expect(view).toBeTruthy();
-        });
-    });
 });

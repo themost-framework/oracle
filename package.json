@@ -28,8 +28,9 @@
   },
   "homepage": "https://github.com/themost-framework/themost-oracle",
   "dependencies": {
-    "async": "^1.5.2",
-    "lodash": "^4.17.4",
+    "@themost/events": "^1.5.0",
+    "async": "^2.6.4",
+    "lodash": "^4.17.21",
     "oracledb": "^6.3.0"
   },
   "peerDependencies": {
