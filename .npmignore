@@ -15,3 +15,4 @@ jest.config.js
 babel.config.js
 jsconfig.json
 jest.setup.js
+jest.global.js

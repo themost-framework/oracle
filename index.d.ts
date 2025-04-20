@@ -1,7 +1,17 @@
 
 // Copyright (c) 2017-2021, THEMOST LP. All rights reserved.
 import { SqlFormatter } from "@themost/query";
-import {DataAdapterIndexes} from "@themost/common";
+import {DataAdapterIndexes, DataAdapterTable, DataAdapterView, TraceLogger} from "@themost/common";
+
+declare module "@themost/common" {
+    export class TraceUtils {
+        static newLogger(): TraceLogger;
+    }
+
+    export class TraceLogger {
+        setLogLevel(level: string): void;
+    }
+}
 
 export declare interface OracleAdapterTable {
     create(fields: Array<any>, callback: (err: Error) => void): void;

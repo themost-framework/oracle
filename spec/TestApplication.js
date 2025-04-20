@@ -11,7 +11,8 @@ const testConnectionOptions = {
     'port': parseInt(process.env.DB_PORT, 10),
     'user': process.env.DB_USER,
     'password': process.env.DB_PASSWORD,
-    'service': process.env.DB_SERVICE
+    'service': process.env.DB_SERVICE,
+    'logLevel': 'debug'
 };
 
 if (process.env.DB_SCHEMA) {

@@ -171,7 +171,10 @@ describe('OracleAdapter', () => {
         await app.executeInTestTransaction(async (context) => {
             const db = context.db;
             let exists = await db.table('Table1').existsAsync();
-            expect(exists).toBeFalsy();
+            // drop test table, if exists
+            if (exists) {
+                await db.executeAsync(`DROP TABLE ${new OracleFormatter().escapeName('Table1')}`);
+            }
             await db.table('Table1').createAsync([
                 {
                     name: 'id',
@@ -197,7 +200,8 @@ describe('OracleAdapter', () => {
 
             let list = await db.indexes('Table1').listAsync();
             expect(Array.isArray(list)).toBeTruthy();
-            exists = list.findIndex((index) => index.name === 'idx_name') < 0;
+            exists = list.findIndex((index) => index.name === 'idx_name') >= 0;
+            expect(exists).toBeFalsy();
 
             await db.indexes('Table1').createAsync('idx_name', [
                 'name'

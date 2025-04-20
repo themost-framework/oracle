@@ -29,6 +29,22 @@ function instanceOf(any, ctor) {
 }
 
 /**
+ *
+ * @returns {import('@themost/common').TraceLogger}
+ */
+function createLogger() {
+    if (typeof TraceUtils.newLogger === 'function') {
+        return TraceUtils.newLogger();
+    }
+    const [loggerProperty] = Object.getOwnPropertySymbols(TraceUtils);
+    const logger = TraceUtils[loggerProperty];
+    const newLogger = Object.create(TraceUtils[loggerProperty]);
+    newLogger.options = Object.assign({}, logger.options);
+    return newLogger;
+}
+
+
+/**
  * @class
  * @augments {import('@themost/common').DataAdapterBase}
  * @property {string} connectString
@@ -52,10 +68,8 @@ class OracleAdapter {
             get: function() {
                 if (typeof connectString === 'string') {
                     return connectString;
-                }
-                else {
-                    //generate connectString ([//]host_name[:port][/service_name][:server_type][/instance_name])
-                    //get hostname or localhost
+                } else {
+                    // get hostname or localhost
                     connectString = options.host || 'localhost';
                     //append port
                     if (typeof options.port !== 'undefined') { connectString += ':' + options.port; }
@@ -66,6 +80,24 @@ class OracleAdapter {
                 }
             }
         });
+
+        /**
+         * create a new instance of logger
+         * @type {import('@themost/common').TraceLogger}
+         */
+        this.logger = createLogger();
+        // use log level from connection options, if any
+        if (typeof this.options.logLevel === 'string' && this.options.logLevel.length) {
+            // if the logger has level(string) function
+            if (typeof this.logger.level === 'function') {
+                // try to set log level
+                this.logger.level(this.options.logLevel);
+                // otherwise, check if logger has setLogLevel(string) function
+            } else if (typeof this.logger.setLogLevel === 'function') {
+                this.logger.setLogLevel(this.options.logLevel);
+            }
+        }
+
     }
 
     open(callback) {
@@ -75,7 +107,7 @@ class OracleAdapter {
             callback();
         }
         else {
-            TraceUtils.debug('Opening database connection');
+            self.logger.debug('Opening database connection');
             oracledb.getConnection(
                 {
                     user          : this.options.user,
@@ -142,14 +174,14 @@ class OracleAdapter {
         try {
             if (self.rawConnection)
             {
-                TraceUtils.debug('Closing database connection');
+                self.logger.debug('Closing database connection');
                 //close connection
                 self.rawConnection.release(function(err) {
                     if (err) {
-                        TraceUtils.debug('An error occurred while closing database connection.');
-                        TraceUtils.debug(err);
+                        self.logger.debug('An error occurred while closing database connection.');
+                        self.logger.debug(err);
                     }
-                    TraceUtils.debug('Close database connection');
+                    self.logger.debug('Close database connection');
                     //destroy raw connection
                     self.rawConnection=null;
                     //and finally return
@@ -162,8 +194,8 @@ class OracleAdapter {
 
         }
         catch (err) {
-            TraceUtils.debug('An error occurred while closing database connection');
-            TraceUtils.debug(err);
+            self.logger.debug('An error occurred while closing database connection');
+            self.logger.debug(err);
             //call callback without error
             callback();
         }
@@ -1295,12 +1327,12 @@ class OracleAdapter {
                 }
                 // prepare statement - the traditional way
                 const prepared = self.prepare(sql, values);
-                TraceUtils.debug(`SQL ${prepared}`);
+                self.logger.debug(`SQL ${prepared}`);
                 // execute raw command
                 self.rawConnection.execute(prepared,[], {outFormat: oracledb.OBJECT, autoCommit: (typeof self.transaction === 'undefined') }, function(err, result) {
                     self.tryClose(function() {
                         if (err) {
-                            TraceUtils.error(`SQL Error ${prepared}`);
+                            self.logger.error(`SQL Error ${prepared}`);
                             return callback(err);
                         }
                         if (result) {
@@ -1620,7 +1652,7 @@ class OracleFormatter extends SqlFormatter {
 
     $date(p0) {
         //alternative date solution: 'TO_TIMESTAMP_TZ(TO_CHAR(%s, 'YYYY-MM-DD'),'YYYY-MM-DD')'
-        return util.format('TRUNC(%s)', this.escape(p0)) ;
+        return util.format('TO_CHAR(TRUNC(%s), \'YYYY-MM-DD\')', this.escape(p0)) ;
     }
 
     /**
