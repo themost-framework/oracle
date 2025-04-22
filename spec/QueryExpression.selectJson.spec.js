@@ -371,7 +371,7 @@ describe('SqlFormatter', () => {
             const {viewAdapter: Customers} = context.model('Person');
             const {viewAdapter: OrderStatusTypes} = context.model('OrderStatusType');
             const q = new QueryExpression().select(
-                'id', 'orderedItem', 'orderStatus', 'orderDate'
+                'id', 'orderedItem', 'orderDate'
             ).from(Orders).join(new QueryEntity(Customers).as('customers')).with(
                 new QueryExpression().where(
                     new QueryField('customer').from(Orders)

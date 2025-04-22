@@ -1,6 +1,9 @@
 import util from 'util';
 import _ from 'lodash';
 import { SqlFormatter, QueryField, QueryExpression } from '@themost/query';
+import isPlainObject from 'lodash/isPlainObject';
+import isObjectLike from 'lodash/isObjectLike';
+import isNative from 'lodash/isNative';
 
 const SINGLE_QUOTE_ESCAPE = '\'\'';
 const DOUBLE_QUOTE_ESCAPE = '"';
@@ -75,7 +78,8 @@ class OracleFormatter extends SqlFormatter {
         this.settings = {
             nameFormat:NAME_FORMAT,
             forceAlias:true,
-            useAliasKeyword: false
+            useAliasKeyword: false,
+            jsonDateFormat: 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"',
         };
     }
 
@@ -117,13 +121,13 @@ class OracleFormatter extends SqlFormatter {
             if (/\\'/g.test(res)) {
                 //escape single quote (that is already escaped)
                 res = res.replace(/\\'/g, SINGLE_QUOTE_ESCAPE);
-                if (/\\"/g.test(res))
-                //escape double quote (that is already escaped)
-                    res = res.replace(/\\"/g, DOUBLE_QUOTE_ESCAPE);
-                if (/\\\\/g.test(res))
-                //escape slash (that is already escaped)
-                    res = res.replace(/\\\\/g, SLASH_ESCAPE);
             }
+            if (/\\"/g.test(res))
+            //escape double quote (that is already escaped)
+                res = res.replace(/\\"/g, DOUBLE_QUOTE_ESCAPE);
+            if (/\\\\/g.test(res))
+            //escape slash (that is already escaped)
+                res = res.replace(/\\\\/g, SLASH_ESCAPE);
         }
         return res;
     }
@@ -344,26 +348,48 @@ class OracleFormatter extends SqlFormatter {
     }
 
     $day(p0) {
+        if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
+            return util.format('EXTRACT(DAY FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
+        }
         return util.format('EXTRACT(DAY FROM %s)', this.escape(p0)) ;
     }
 
     $month(p0) {
+        if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
+            return util.format('EXTRACT(MONTH FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
+        }
         return util.format('EXTRACT(MONTH FROM %s)', this.escape(p0)) ;
     }
 
     $year(p0) {
-        return util.format('EXTRACT(YEAR FROM %s)', this.escape(p0)) ;
+        if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
+            // try to get json date value
+            // important note: we are expecting to have a datetime value like '2023-10-01T00:00:00.000Z'
+            // so we need to convert it to a date value
+            // and then extract the year
+            return util.format('EXTRACT(YEAR FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
+        }
+        return util.format('EXTRACT(YEAR FROM %s)', this.escape(p0));
     }
 
     $hour(p0) {
+        if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
+            return util.format('EXTRACT(HOUR FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
+        }
         return util.format('EXTRACT(HOUR FROM %s)', this.escape(p0)) ;
     }
 
     $minute(p0) {
+        if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
+            return util.format('EXTRACT(MINUTE FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
+        }
         return util.format('EXTRACT(MINUTE FROM %s)', this.escape(p0)) ;
     }
 
     $second(p0) {
+        if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
+            return util.format('EXTRACT(SECOND FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
+        }
         return util.format('EXTRACT(SECOND FROM %s)', this.escape(p0)) ;
     }
 
@@ -420,6 +446,10 @@ class OracleFormatter extends SqlFormatter {
         return 'REGEXP_REPLACE(SYS_GUID(), \'(.{8})(.{4})(.{4})(.{4})(.{12})\', \'\\1-\\2-\\3-\\4-\\5\')';
     }
 
+    $toGuid(p0) {
+        return `REGEXP_REPLACE(STANDARD_HASH(TO_CHAR(${this.escape(p0)}),\'MD5\'), \'(.{8})(.{4})(.{4})(.{4})(.{12})\', \'\\1-\\2-\\3-\\4-\\5\')`;
+    }
+
     /**
      *
      * @param {('date'|'datetime'|'timestamp')} type
@@ -440,7 +470,7 @@ class OracleFormatter extends SqlFormatter {
 
 
     $toInt(expr) {
-        return `CAST(${this.escape(expr)} AS INT)`;
+        return `FLOOR(CAST(${this.escape(expr)} as DECIMAL(19,8)))`;
     }
 
     $toDouble(expr) {
@@ -483,6 +513,17 @@ class OracleFormatter extends SqlFormatter {
      */
     $jsonEach(expr) {
         return `JSON_TABLE(${this.escapeName(expr)})`;
+    }
+
+    /**
+     * @param {{ $jsonGet: Array<*> }} expr
+     */
+    $jsonGroupArray(expr) {
+        const [key] = Object.keys(expr);
+        if (key !== '$jsonObject') {
+            throw new Error('Invalid json group array expression. Expected a json object expression');
+        }
+        return `JSON_ARRAYAGG(${this.escape(expr)})`;
     }
 
     /**

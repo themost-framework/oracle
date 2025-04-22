@@ -7,7 +7,7 @@ import { TraceUtils, LangUtils } from '@themost/common';
 import { AsyncSeriesEventEmitter, before, after } from '@themost/events';
 import { OracleFormatter } from './OracleFormatter';
 
-oracledb.fetchAsString = [ oracledb.CLOB ];
+oracledb.fetchAsString = [ oracledb.CLOB, oracledb.NCLOB ];
 
 /**
  *
@@ -296,13 +296,13 @@ class OracleAdapter {
             case 'Note':
                 // important note: if size is greater than 4000 then we use CLOB instead of NVARCHAR2
                 if (size > 2000) {
-                    s = 'CLOB';
+                    s = 'NCLOB';
                 } else {
                     s = size > 0 ? util.format('NVARCHAR2(%s)', size) : 'NVARCHAR2(2000)';
                 }
                 break;
             case 'Json':
-                s = 'CLOB';
+                s = 'NCLOB';
                 break
             case 'Image':
             case 'Binary':
@@ -540,6 +540,10 @@ class OracleAdapter {
                                         i-=1;
                                     }
                                     else {
+                                        // add exception for NCLOB size (remove it)
+                                        if (column.type === 'NCLOB') {
+                                            delete column.size;
+                                        }
                                         newType = format('%t', x);
                                         if (column.precision !== null && column.scale !== null) {
                                             oldType = util.format('%s(%s,%s) %s', column.type.toUpperCase(), column.precision.toString(), column.scale.toString(), (column.nullable ? 'NULL' : 'NOT NULL'));
@@ -547,7 +551,7 @@ class OracleAdapter {
                                         else if (/^TIMESTAMP\(\d+\) WITH LOCAL TIME ZONE$/i.test(column.type)) {
                                             oldType=util.format('%s %s', column.type.toUpperCase(), (column.nullable ? 'NULL' : 'NOT NULL'));
                                         }
-                                        else if (column.size !== null) {
+                                        else if (column.size != null) {
                                             oldType = util.format('%s(%s) %s', column.type.toUpperCase(), column.size.toString(), (column.nullable ? 'NULL' : 'NOT NULL'));
                                         }
                                         else {
@@ -1334,12 +1338,13 @@ class OracleAdapter {
         return callback();
     }
 
-    @after(({target, args}, callback) => {
+    @after(({target, args, result: results}, callback) => {
         const [query, params] = args;
         void target.executed.emit({
             target,
             query,
-            params
+            params,
+            results
         }).then(() => {
             return callback();
         }).catch((err) => {

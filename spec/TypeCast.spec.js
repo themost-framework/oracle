@@ -113,7 +113,7 @@ describe('Type Casting', () => {
         });
         expr = new QueryExpression().where(id).equal(orderedItem);
         sql = formatter.formatWhere(expr.$where);
-        expect(sql).toEqual('("ProductData"."id"=CAST("OrderData"."orderedItem" as VARCHAR))');
+        expect(sql).toEqual('("ProductData"."id"=TO_NCHAR("OrderData"."orderedItem"))');
     });
 
     it('should use $toString inside closure', async () => {
