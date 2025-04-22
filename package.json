@@ -50,6 +50,7 @@
     "@rollup/plugin-commonjs": "^22.0.0",
     "@themost/common": "^2.11.1",
     "@themost/data": "^2.18.5",
+    "@themost/json": "^1.1.0",
     "@themost/json-logger": "^1.3.0",
     "@themost/query": "^2.14.11",
     "@themost/sqlite": "^2.10.0",

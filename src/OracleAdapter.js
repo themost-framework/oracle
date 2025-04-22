@@ -148,7 +148,7 @@ class OracleAdapter {
                             if (keys.length === 0) {
                                 return callback();
                             }
-                            const formatter = new OracleFormatter();
+                            const formatter = self.getFormatter();
                             sqls.push.apply(sqls, keys.map((key) => {
                                 return 'ALTER session SET ' + formatter.escapeName(key) + '=' + formatter.escape(session[key])
                             }));
@@ -905,7 +905,7 @@ class OracleAdapter {
                 //get table qualified name
                 let strTable = '';
 
-                const formatter = new OracleFormatter();
+                const formatter = self.getFormatter();
                 if (typeof owner !== 'undefined') { strTable = formatter.escapeName(owner) + '.'; }
                 strTable += formatter.escapeName(table);
                 //add primary key constraint
@@ -955,7 +955,7 @@ class OracleAdapter {
                 //get table qualified name
                 let strTable = '';
 
-                const formatter = new OracleFormatter();
+                const formatter = self.getFormatter();
                 if (typeof owner !== 'undefined') { strTable = formatter.escapeName(owner) + '.'; }
                 strTable += formatter.escapeName(table);
                 //generate SQL statement
@@ -1011,7 +1011,7 @@ class OracleAdapter {
                     //get table qualified name
                     let strTable = '';
 
-                    const formatter = new OracleFormatter();
+                    const formatter = self.getFormatter();
                     if (typeof owner !== 'undefined') { strTable = formatter.escapeName(owner) + '.'; }
                     strTable += formatter.escapeName(table);
                     //generate SQL statement
@@ -1129,7 +1129,7 @@ class OracleAdapter {
                         if (err) { tr(err); return; }
                         try {
                             let sql = util.format('CREATE VIEW "%s" AS ', name);
-                            const formatter = new OracleFormatter();
+                            const formatter = self.getFormatter();
                             sql += formatter.format(q);
                             self.execute(sql, [], tr);
                         }
@@ -1381,7 +1381,7 @@ class OracleAdapter {
                 sql = query;
             } else {
                 // format query expression or any object that may be acted as query expression
-                const formatter = new OracleFormatter();
+                const formatter = self.getFormatter();
                 sql = formatter.format(query);
             }
             // validate sql statement

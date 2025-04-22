@@ -81,6 +81,12 @@ class OracleFormatter extends SqlFormatter {
             useAliasKeyword: false,
             jsonDateFormat: 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"',
         };
+        // try to validate if JSON.stringify returns a date as string using timestamp with timezone
+        // e.g. 2020-12-14T12:45:00.000+02:00
+        const date = JSON.stringify(new Date());
+        if (/[+-][0-9]\d:[0-9]\d$/.test(date) === true) {
+            this.settings.jsonDateFormat = 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM';
+        }
     }
 
     escapeName(name) {
@@ -349,9 +355,9 @@ class OracleFormatter extends SqlFormatter {
 
     $day(p0) {
         if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
-            return util.format('EXTRACT(DAY FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
+            return `EXTRACT(DAY FROM TO_TIMESTAMP_TZ(${this.escape(p0)}, '${this.settings.jsonDateFormat}'))`;
         }
-        return util.format('EXTRACT(DAY FROM %s)', this.escape(p0)) ;
+        return `EXTRACT(DAY FROM ${this.escape(p0)})`;
     }
 
     $month(p0) {
