@@ -108,9 +108,9 @@ class OracleFormatter extends SqlFormatter {
         if (value instanceof Date) {
             return util.format('TO_TIMESTAMP_TZ(%s, \'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM\')', this.escapeDate(value));
         }
-        // if (typeof value === 'string' && LangUtils.isDate(value)) {
-        //     return util.format('TO_TIMESTAMP_TZ(%s, \'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM\')', this.escapeDate(new Date(value)));
-        // }
+        if (typeof value === 'string' && TIMESTAMP_REGEX.test(value) === true) {
+            return util.format('TO_TIMESTAMP_TZ(%s, \'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM\')', this.escapeDate(new Date(value)));
+        }
         // serialize array of objects as json array
         if (Array.isArray(value)) {
             // find first non-object value
