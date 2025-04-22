@@ -9,6 +9,8 @@ const SINGLE_QUOTE_ESCAPE = '\'\'';
 const DOUBLE_QUOTE_ESCAPE = '"';
 const SLASH_ESCAPE = '\\';
 const NAME_FORMAT = '"$1"';
+const TIMESTAMP_REGEX = /^\d{4}-[01]\d-[0-3]\d[T][0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|[+-][0-9]\d:[0-9]\d)$/gm;
+
 
 const objectToString = Function.prototype.toString.call(Object);
 
@@ -79,12 +81,12 @@ class OracleFormatter extends SqlFormatter {
             nameFormat:NAME_FORMAT,
             forceAlias:true,
             useAliasKeyword: false,
-            jsonDateFormat: 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"',
+            jsonDateFormat: 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"', // default json date format YYYY-MM-DDTHH:mm:ss.sssZ
         };
         // try to validate if JSON.stringify returns a date as string using timestamp with timezone
         // e.g. 2020-12-14T12:45:00.000+02:00
         const date = JSON.stringify(new Date());
-        if (/[+-][0-9]\d:[0-9]\d$/.test(date) === true) {
+        if (TIMESTAMP_REGEX.test(date) === true) {
             this.settings.jsonDateFormat = 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM';
         }
     }
