@@ -1,4 +1,4 @@
-import { OracleFormatter } from '../index';
+import { OracleFormatter } from '@themost/oracle';
 import { QueryExpression } from '@themost/query';
 import { TestApplication } from './TestApplication';
 

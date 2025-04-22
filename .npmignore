@@ -16,3 +16,6 @@ babel.config.js
 jsconfig.json
 jest.setup.js
 jest.global.js
+
+# rollup
+rollup.config.js

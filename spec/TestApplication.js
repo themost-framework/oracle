@@ -1,6 +1,6 @@
 // eslint-disable-next-line no-unused-vars
 import {DataApplication, DataConfigurationStrategy, DataCacheStrategy, DataContext, ODataModelBuilder, ODataConventionModelBuilder} from '@themost/data';
-import { createInstance, OracleFormatter } from '../index';
+import { createInstance, OracleFormatter } from '@themost/oracle';
 import { TraceUtils, LangUtils } from '@themost/common';
 import { QueryExpression } from '@themost/query';
 import { SqliteAdapter } from '@themost/sqlite';

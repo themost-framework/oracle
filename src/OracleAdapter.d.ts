@@ -1,7 +1,7 @@
 
-// Copyright (c) 2017-2021, THEMOST LP. All rights reserved.
-import { SqlFormatter } from "@themost/query";
-import {DataAdapterIndexes, DataAdapterTable, DataAdapterView, TraceLogger} from "@themost/common";
+import { QueryExpression } from "@themost/query";
+import {DataAdapterIndexes, TraceLogger} from "@themost/common";
+import {AsyncSeriesEventEmitter} from "@themost/events";
 
 declare module "@themost/common" {
     export class TraceUtils {
@@ -45,6 +45,12 @@ export declare interface OracleAdapterMigration {
 }
 
 export declare class OracleAdapter {
+
+    public logger: TraceLogger;
+    public executing: AsyncSeriesEventEmitter<{target: this, query: (string|QueryExpression), params?: unknown[]}>;
+    public executed: AsyncSeriesEventEmitter<{target: this, query: (string|QueryExpression), params?: unknown[], results: uknown[]}>;
+
+
     static formatType(field: any): string;
     formatType(field: any): string;
     open(callback: (err: Error) => void): void;
@@ -57,6 +63,7 @@ export declare class OracleAdapter {
     executeInTransactionAsync(func: Promise<any>): Promise<any>;
     migrate(obj: OracleAdapterMigration, callback: (err: Error) => void): void;
     selectIdentity(entity: string, attribute: string, callback: (err: Error, value: any) => void): void;
+    selectIdentityAsync(entity: string, attribute: string): Promise<any>;
     execute(query: any, values: any, callback: (err: Error, value: any) => void): void;
     executeAsync(query: any, values: any): Promise<any>;
     executeAsync<T>(query: any, values: any): Promise<Array<T>>;
@@ -65,9 +72,5 @@ export declare class OracleAdapter {
     resetIdentity(entity: string, attribute: string, callback: (err: Error) => void): void;
     resetIdentityAsync(entity: string, attribute: string): Promise<void>;
     indexes(name: string): DataAdapterIndexes;
+    getFormatter(): SqlFormatter;
 }
-
-export declare class OracleFormatter extends SqlFormatter {
-}
-
-export declare function createInstance(options: any): OracleAdapter;

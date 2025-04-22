@@ -1,4 +1,4 @@
-import { OracleFormatter } from '../index';
+import { OracleFormatter } from '@themost/oracle';
 import { TestApplication } from './TestApplication';
 
 describe('OracleFormatter', () => {

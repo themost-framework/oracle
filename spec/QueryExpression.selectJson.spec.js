@@ -1,11 +1,11 @@
 // noinspection SpellCheckingInspection
 
 import {MemberExpression, MethodCallExpression, QueryEntity, QueryExpression, QueryField} from '@themost/query';
-import { PostgreSQLFormatter } from '@themost/pg';
+import { OracleFormatter } from '@themost/oracle';
 import SimpleOrderSchema from './config/models/SimpleOrder.json';
 import {TestApplication} from './TestApplication';
 import { TraceUtils } from '@themost/common';
-import { DataPermissionEventListener, executeInUnattendedMode, executeInUnattendedModeAsync } from '@themost/data';
+import { DataPermissionEventListener, executeInUnattendedModeAsync } from '@themost/data';
 import { promisify } from 'util';
 const beforeExecuteAsync = promisify(DataPermissionEventListener.prototype.beforeExecute);
 
@@ -107,6 +107,7 @@ async function createSimpleOrders(db) {
         }
     });
     for (const item of items) {
+        item.id = await db.selectIdentityAsync('SimpleOrders', 'id');
         await db.executeAsync(new QueryExpression().insert(item).into(source), []);
     }
 }
@@ -162,7 +163,7 @@ describe('SqlFormatter', () => {
                 }
             })
                 .from(Orders);
-            const formatter = new PostgreSQLFormatter();
+            const formatter = new OracleFormatter();
             const sql = formatter.format(query);
             /**
              * @type {Array<{id: number, customer: string}>}
@@ -191,7 +192,7 @@ describe('SqlFormatter', () => {
                 }
             })
                 .from(Orders);
-            const formatter = new PostgreSQLFormatter();
+            const formatter = new OracleFormatter();
             const sql = formatter.format(query);
             /**
              * @type {Array<{id: number, customer: string}>}
@@ -220,7 +221,7 @@ describe('SqlFormatter', () => {
                 }
             })
                 .from(Orders);
-            const formatter = new PostgreSQLFormatter();
+            const formatter = new OracleFormatter();
             const sql = formatter.format(query);
             /**
              * @type {Array<{id: number, customer: string, releaseYear: number}>}
@@ -248,12 +249,12 @@ describe('SqlFormatter', () => {
                 }
             })
                 .from(Orders);
-            const formatter = new PostgreSQLFormatter();
+            const formatter = new OracleFormatter();
             const sql = formatter.format(query);
             /**
              * @type {Array<{id: number, customer: string, releaseYear: number}>}
              */
-            const results = await context.db.executeAsync(sql, []);
+            const results = await context.db.executeAsync(query, []);
             expect(results).toBeTruthy();
             for (const result of results) {
                 if (typeof result.customer === 'string') {
