@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@themost/oracle": ["src/index"]
+    }
+  }
+}

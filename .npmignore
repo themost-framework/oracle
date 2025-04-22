@@ -1,7 +1,23 @@
 node_modules
 .idea
 .DS_STORE
-spec
+.vscode
+.env
+
+# github
 .github
+
+# eslint
 .eslintrc
 .eslintignore
+
+# test
+spec
+jest.config.js
+babel.config.js
+jsconfig.json
+jest.setup.js
+jest.global.js
+
+# rollup
+rollup.config.js

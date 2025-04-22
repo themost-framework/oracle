@@ -1,36 +1,69 @@
-// Copyright (c) 2017-2021, THEMOST LP. All rights reserved.
-const oracledb = require('oracledb');
-const async =  require('async');
-const util = require('util');
-const _ = require('lodash');
-const {SqlFormatter, SqlUtils, QueryField, QueryExpression} = require('@themost/query');
-const {TraceUtils,LangUtils}  = require('@themost/common');
+import oracledb from 'oracledb';
+import async from 'async';
+import util from 'util';
+import _ from 'lodash';
+import { SqlUtils, QueryExpression } from '@themost/query';
+import { TraceUtils, LangUtils } from '@themost/common';
+import { AsyncSeriesEventEmitter, before, after } from '@themost/events';
+import { OracleFormatter } from './OracleFormatter';
 
+oracledb.fetchAsString = [ oracledb.CLOB, oracledb.NCLOB ];
 
-function zeroPad(number, length) {
-    number = number || 0;
-    let res = number.toString();
-    while (res.length < length) {
-        res = '0' + res;
+/**
+ *
+ * @returns {import('@themost/common').TraceLogger}
+ */
+function createLogger() {
+    if (typeof TraceUtils.newLogger === 'function') {
+        return TraceUtils.newLogger();
     }
-    return res;
+    const [loggerProperty] = Object.getOwnPropertySymbols(TraceUtils);
+    const logger = TraceUtils[loggerProperty];
+    const newLogger = Object.create(TraceUtils[loggerProperty]);
+    newLogger.options = Object.assign({}, logger.options);
+    return newLogger;
 }
 
-function instanceOf(any, ctor) {
-    // validate constructor
-    if (typeof ctor !== 'function') {
-        return false
+/**
+ *
+ * @param {{target: OracleAdapter, query: string|QueryExpression, results: Array<*>}} event
+ */
+function onReceivingJsonObject(event) {
+    if (typeof event.query === 'object' && event.query.$select) {
+        // try to identify the usage of a $jsonObject dialect and format result as JSON
+        const { $select: select } = event.query;
+        if (select) {
+            const attrs = Object.keys(select).reduce((previous, current) => {
+                const fields = select[current];
+                previous.push(...fields);
+                return previous;
+            }, []).filter((x) => {
+                const [key] = Object.keys(x);
+                if (typeof key !== 'string') {
+                    return false;
+                }
+                return x[key].$jsonObject != null || x[key].$jsonArray != null  || x[key].$jsonGroupArray != null;
+            }).map((x) => {
+                return Object.keys(x)[0];
+            });
+            if (attrs.length > 0) {
+                if (Array.isArray(event.results)) {
+                    for(const result of event.results) {
+                        attrs.forEach((attr) => {
+                            if (Object.prototype.hasOwnProperty.call(result, attr) && typeof result[attr] === 'string') {
+                                result[attr] = JSON.parse(result[attr]);
+                            }
+                        });
+                    }
+                }
+            }
+        }
     }
-    // validate with instanceof
-    if (any instanceof ctor) {
-        return true;
-    }
-    return !!(any && any.constructor && any.constructor.name === ctor.name);
 }
 
 /**
  * @class
- * @augments DataAdapter
+ * @augments {import('@themost/common').DataAdapterBase}
  * @property {string} connectString
  */
 class OracleAdapter {
@@ -52,10 +85,8 @@ class OracleAdapter {
             get: function() {
                 if (typeof connectString === 'string') {
                     return connectString;
-                }
-                else {
-                    //generate connectString ([//]host_name[:port][/service_name][:server_type][/instance_name])
-                    //get hostname or localhost
+                } else {
+                    // get hostname or localhost
                     connectString = options.host || 'localhost';
                     //append port
                     if (typeof options.port !== 'undefined') { connectString += ':' + options.port; }
@@ -66,6 +97,27 @@ class OracleAdapter {
                 }
             }
         });
+
+        this.executing = new AsyncSeriesEventEmitter();
+        this.executed = new AsyncSeriesEventEmitter();
+        this.executed.subscribe(onReceivingJsonObject);
+        /**
+         * create a new instance of logger
+         * @type {import('@themost/common').TraceLogger}
+         */
+        this.logger = createLogger();
+        // use log level from connection options, if any
+        if (typeof this.options.logLevel === 'string' && this.options.logLevel.length) {
+            // if the logger has level(string) function
+            if (typeof this.logger.level === 'function') {
+                // try to set log level
+                this.logger.level(this.options.logLevel);
+                // otherwise, check if logger has setLogLevel(string) function
+            } else if (typeof this.logger.setLogLevel === 'function') {
+                this.logger.setLogLevel(this.options.logLevel);
+            }
+        }
+
     }
 
     open(callback) {
@@ -75,7 +127,7 @@ class OracleAdapter {
             callback();
         }
         else {
-            TraceUtils.debug('Opening database connection');
+            self.logger.debug('Opening database connection');
             oracledb.getConnection(
                 {
                     user          : this.options.user,
@@ -96,7 +148,7 @@ class OracleAdapter {
                             if (keys.length === 0) {
                                 return callback();
                             }
-                            const formatter = new OracleFormatter();
+                            const formatter = self.getFormatter();
                             sqls.push.apply(sqls, keys.map((key) => {
                                 return 'ALTER session SET ' + formatter.escapeName(key) + '=' + formatter.escape(session[key])
                             }));
@@ -142,14 +194,14 @@ class OracleAdapter {
         try {
             if (self.rawConnection)
             {
-                TraceUtils.debug('Closing database connection');
+                self.logger.debug('Closing database connection');
                 //close connection
                 self.rawConnection.release(function(err) {
                     if (err) {
-                        TraceUtils.debug('An error occured while closing database connection.');
-                        TraceUtils.debug(err);
+                        self.logger.debug('An error occurred while closing database connection.');
+                        self.logger.debug(err);
                     }
-                    TraceUtils.debug('Close database connection');
+                    self.logger.debug('Close database connection');
                     //destroy raw connection
                     self.rawConnection=null;
                     //and finally return
@@ -162,8 +214,8 @@ class OracleAdapter {
 
         }
         catch (err) {
-            TraceUtils.debug('An error occured while closing database connection');
-            TraceUtils.debug(err);
+            self.logger.debug('An error occurred while closing database connection');
+            self.logger.debug(err);
             //call callback without error
             callback();
         }
@@ -242,8 +294,16 @@ class OracleAdapter {
                 s = size > 0 ? util.format('NVARCHAR2(%s)', size) : 'NVARCHAR2(255)';
                 break;
             case 'Note':
-                s = size > 0 ? util.format('NVARCHAR2(%s)', size) : 'NVARCHAR2(2000)';
+                // important note: if size is greater than 4000 then we use CLOB instead of NVARCHAR2
+                if (size > 2000) {
+                    s = 'NCLOB';
+                } else {
+                    s = size > 0 ? util.format('NVARCHAR2(%s)', size) : 'NVARCHAR2(2000)';
+                }
                 break;
+            case 'Json':
+                s = 'NCLOB';
+                break
             case 'Image':
             case 'Binary':
                 s ='LONG RAW';
@@ -276,6 +336,7 @@ class OracleAdapter {
         try {
             // ensure parameters
             if (typeof executeFunc !== 'function') {
+                // noinspection ExceptionCaughtLocallyJS
                 throw new Error('Invalid argument. Expected a valid function that is going to be executed in transaction.');
             }
             callback = callback || function() {};
@@ -368,7 +429,7 @@ class OracleAdapter {
         callback = callback || function() {};
         if (typeof obj === 'undefined' || obj === null) { callback(); return; }
         /**
-         * @type {DataModelMigration|*}
+         * @type {*}
          */
         const migration = obj;
 
@@ -411,18 +472,6 @@ class OracleAdapter {
                     OracleAdapter.supportMigrations=true;
                     return cb(null, 0);
                 });
-
-                //self.execute('CREATE TABLE "migrations"("id" NUMBER(10) NOT NULL, ' +
-                //    '"appliesTo" NVARCHAR2(255) NOT NULL, "model" NVARCHAR2(255) NULL, ' +
-                //    '"description" NVARCHAR2(255),"version" NVARCHAR2(24) NOT NULL, ' +
-                //    'CONSTRAINT "migrations_pk" PRIMARY KEY ("id")); ' +
-                //    'CREATE SEQUENCE "migrations_seq" START WITH 1 INCREMENT BY 1; ' +
-                //    'CREATE TRIGGER "migrations_auto_inc" BEFORE INSERT ON "migrations" FOR EACH ROW BEGIN :new."id" := "migrations_seq".nextval; END;',
-                //    [], function(err) {
-                //        if (err) { cb(err); return; }
-                //        OracleAdapter.supportMigrations=true;
-                //        cb(null, 0);
-                //    });
             },
             //3. Check if migration has already been applied (true=Table version is equal to migration version, false=Table version is older from migration version)
             function(arg, cb) {
@@ -491,6 +540,10 @@ class OracleAdapter {
                                         i-=1;
                                     }
                                     else {
+                                        // add exception for NCLOB size (remove it)
+                                        if (column.type === 'NCLOB') {
+                                            delete column.size;
+                                        }
                                         newType = format('%t', x);
                                         if (column.precision !== null && column.scale !== null) {
                                             oldType = util.format('%s(%s,%s) %s', column.type.toUpperCase(), column.precision.toString(), column.scale.toString(), (column.nullable ? 'NULL' : 'NOT NULL'));
@@ -498,7 +551,7 @@ class OracleAdapter {
                                         else if (/^TIMESTAMP\(\d+\) WITH LOCAL TIME ZONE$/i.test(column.type)) {
                                             oldType=util.format('%s %s', column.type.toUpperCase(), (column.nullable ? 'NULL' : 'NOT NULL'));
                                         }
-                                        else if (column.size !== null) {
+                                        else if (column.size != null) {
                                             oldType = util.format('%s(%s) %s', column.type.toUpperCase(), column.size.toString(), (column.nullable ? 'NULL' : 'NOT NULL'));
                                         }
                                         else {
@@ -613,6 +666,18 @@ class OracleAdapter {
         });
     }
 
+    selectIdentityAsync(entity, attribute) {
+        const self = this;
+        return new Promise(function(resolve, reject) {
+            void self.selectIdentity(entity, attribute, function(err, value) {
+                if (err) {
+                    return reject(err);
+                }
+                return resolve(value);
+            });
+        });
+    }
+
     resetIdentity(entity, attribute, callback) {
         const self = this;
         return self.selectIdentity(entity, attribute , function(err) {
@@ -671,7 +736,7 @@ class OracleAdapter {
      * @param {*} batch
      * @param {function(Error=)} callback
      */
-    executeBatch(batch, callback) {
+    executeBatch(callback) {
         callback = callback || function() {};
         callback(new Error('DataAdapter.executeBatch() is obsolete. Use DataAdapter.executeInTransaction() instead.'));
     }
@@ -840,7 +905,7 @@ class OracleAdapter {
                 //get table qualified name
                 let strTable = '';
 
-                const formatter = new OracleFormatter();
+                const formatter = self.getFormatter();
                 if (typeof owner !== 'undefined') { strTable = formatter.escapeName(owner) + '.'; }
                 strTable += formatter.escapeName(table);
                 //add primary key constraint
@@ -890,7 +955,7 @@ class OracleAdapter {
                 //get table qualified name
                 let strTable = '';
 
-                const formatter = new OracleFormatter();
+                const formatter = self.getFormatter();
                 if (typeof owner !== 'undefined') { strTable = formatter.escapeName(owner) + '.'; }
                 strTable += formatter.escapeName(table);
                 //generate SQL statement
@@ -946,7 +1011,7 @@ class OracleAdapter {
                     //get table qualified name
                     let strTable = '';
 
-                    const formatter = new OracleFormatter();
+                    const formatter = self.getFormatter();
                     if (typeof owner !== 'undefined') { strTable = formatter.escapeName(owner) + '.'; }
                     strTable += formatter.escapeName(table);
                     //generate SQL statement
@@ -959,7 +1024,7 @@ class OracleAdapter {
             },
             changeAsync: function (fields) {
                 return new Promise((resolve, reject) => {
-                    this.add(fields, (err, res) => {
+                    this.change(fields, (err, res) => {
                         if (err) {
                             return reject(err);
                         }
@@ -1064,7 +1129,7 @@ class OracleAdapter {
                         if (err) { tr(err); return; }
                         try {
                             let sql = util.format('CREATE VIEW "%s" AS ', name);
-                            const formatter = new OracleFormatter();
+                            const formatter = self.getFormatter();
                             sql += formatter.format(q);
                             self.execute(sql, [], tr);
                         }
@@ -1089,6 +1154,183 @@ class OracleAdapter {
         };
     }
 
+    indexes(name) {
+
+        const self = this, formatter = this.getFormatter();
+        let owner;
+        // eslint-disable-next-line no-unused-vars
+        let table;
+        const matches = /(\w+)\.(\w+)/.exec(name);
+        if (matches) {
+            //get schema owner
+            owner = matches[1];
+            //get table name
+            table = matches[2];
+        }
+        else {
+            // eslint-disable-next-line no-unused-vars
+            table = name;
+            // get schema name (from options)
+            if (self.options && self.options.schema) {
+                owner = self.options.schema;
+            }
+        }
+
+        if (owner == null) {
+            owner = self.options.user.toUpperCase();
+        }
+
+        return {
+            list: function (callback) {
+                /**
+                 * @property {Array<{name: string,type:string,columns:Array<string>}>} _indexes
+                 */
+                const thisArg = this;
+                if (Object.prototype.hasOwnProperty.call(thisArg, '_indexes')) {
+                    return callback(null, thisArg._indexes);
+                }
+                self.execute(`SELECT "indexes"."INDEX_NAME" AS "name", "indexes"."INDEX_TYPE" AS "type", "constraints"."CONSTRAINT_TYPE" AS "constraint" FROM USER_INDEXES "indexes" LEFT JOIN USER_CONSTRAINTS "constraints" ON "indexes"."INDEX_NAME" = "constraints"."INDEX_NAME" AND "indexes"."TABLE_NAME" = "constraints"."TABLE_NAME" AND "indexes"."TABLE_OWNER" = "constraints"."OWNER" WHERE "indexes".TABLE_NAME = ${formatter.escape(table)} AND "indexes"."TABLE_OWNER" = ${formatter.escape(owner)}`, null, function (err, result) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    const indexes = result.filter(function (x) {
+                        return x.constraint !== 'P'; // Exclude primary key constraints
+                    }).map(function (x) {
+                        return {
+                            name: x.name,
+                            columns: []
+                        };
+                    });
+                    self.execute(`SELECT "columns"."COLUMN_NAME" AS "name","columns"."INDEX_NAME" AS "index" FROM "USER_IND_COLUMNS" "columns" INNER JOIN "USER_INDEXES" "indexes" ON "indexes"."INDEX_NAME" = "columns"."INDEX_NAME" AND "indexes"."TABLE_NAME" = "columns"."TABLE_NAME" WHERE "indexes"."TABLE_NAME" = ${formatter.escape(table)} AND "indexes"."TABLE_OWNER" = ${formatter.escape(owner)}`, null, function (err, columns) {
+                        if (err) {
+                            return callback(err);
+                        }
+                        indexes.forEach(function (x) {
+                           x.columns = columns.filter((y) => {
+                               return y.index === x.name;
+                           }).map((y) => {
+                               return y.name;
+                           });
+                        });
+                        thisArg._indexes = indexes;
+                        return callback(null, indexes);
+                    });
+                });
+            },
+            listAsync: function() {
+                return new Promise((resolve, reject) => {
+                    this.list((err, results) => {
+                        if (err) {
+                            return reject(err);
+                        }
+                        return resolve(results);
+                    });
+                });
+            },
+            /**
+             * @param {string} name
+             * @param {Array|string} columns
+             * @param {Function} callback
+             */
+            create: function (name, columns, callback) {
+                const cols = [];
+                if (typeof columns === 'string') {
+                    cols.push(columns);
+                }
+                else if (Array.isArray(columns)) {
+                    cols.push.apply(cols, columns);
+                }
+                else {
+                    return callback(new Error('Invalid parameter. Columns parameter must be a string or an array of strings.'));
+                }
+                const thisArg = this;
+                void thisArg.list(function (err, indexes) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    const ix = indexes.find(function (x) { return x.name === name; });
+                    //format create index SQL statement
+                    const sqlCreateIndex = `CREATE INDEX ${formatter.escapeName(name)} ON ${formatter.escapeName(table)}(${cols.map(function (x) { return formatter.escapeName(x); }).join(',')})`
+                    if (typeof ix === 'undefined' || ix === null) {
+                        return self.execute(sqlCreateIndex, [], (err, result) => {
+                            return callback(err, result)
+                        });
+                    }
+                    else {
+                        let nCols = cols.length;
+                        //enumerate existing columns
+                        ix.columns.forEach(function (x) {
+                            if (cols.indexOf(x) >= 0) {
+                                //column exists in index
+                                nCols -= 1;
+                            }
+                        });
+                        if (nCols > 0) {
+                            //drop index
+                            thisArg.drop(name, function (err) {
+                                if (err) {
+                                    return callback(err);
+                                }
+                                //and create it
+                                self.execute(sqlCreateIndex, [], callback);
+                            });
+                        }
+                        else {
+                            //do nothing
+                            return callback();
+                        }
+                    }
+                });
+            },
+            createAsync: function(name, columns) {
+                return new Promise((resolve, reject) => {
+                    this.create(name, columns, (err) => {
+                        if (err) {
+                            return reject(err);
+                        }
+                        return resolve();
+                    });
+                });
+            },
+            drop: function (name, callback) {
+                if (typeof name !== 'string') {
+                    return callback(new Error('Name must be a valid string.'));
+                }
+                void this.list(function (err, indexes) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    const exists = indexes.find(function (x) { return x.name === name; });
+                    if (exists == null) {
+                        return callback();
+                    }
+                    //format drop index SQL statement
+                    const sqlDropIndex = `DROP INDEX ${formatter.escapeName(name)}`;
+                    void self.execute(sqlDropIndex, null, function (err) {
+                        if (err) {
+                            return callback(err);
+                        }
+                        return callback();
+                    });
+                });
+            },
+            dropAsync: function(name) {
+                return new Promise((resolve, reject) => {
+                    this.drop(name, (err) => {
+                        if (err) {
+                            return reject(err);
+                        }
+                        return resolve();
+                    });
+                });
+            }
+        };
+    }
+
+    getFormatter() {
+        return new OracleFormatter();
+    }
+
     /**
      * @param {function} callback 
      */
@@ -1096,6 +1338,31 @@ class OracleAdapter {
         return callback();
     }
 
+    @after(({target, args, result: results}, callback) => {
+        const [query, params] = args;
+        void target.executed.emit({
+            target,
+            query,
+            params,
+            results
+        }).then(() => {
+            return callback();
+        }).catch((err) => {
+            return callback(err);
+        });
+    })
+    @before(({target, args}, callback) => {
+        const [query, params] = args;
+        void target.executing.emit({
+            target,
+            query,
+            params
+        }).then(() => {
+            return callback();
+        }).catch((err) => {
+            return callback(err);
+        });
+    })
     /**
      * Executes a query against the underlying database
      * @param query {QueryExpression|string|*}
@@ -1104,18 +1371,22 @@ class OracleAdapter {
      */
     execute(query, values, callback) {
         const self = this;
-        let sql = null;
+        /**
+         * @type {string}
+         */
+        let sql;
         try {
             if (typeof query === 'string') {
                 // get raw sql statement
                 sql = query;
             } else {
-                // format query expression or any object that may be act as query expression
-                const formatter = new OracleFormatter();
+                // format query expression or any object that may be acted as query expression
+                const formatter = self.getFormatter();
                 sql = formatter.format(query);
             }
             // validate sql statement
             if (typeof sql !== 'string') {
+                // noinspection ExceptionCaughtLocallyJS
                 throw new Error('The executing command is of the wrong type or empty.');
             }
             // ensure connection
@@ -1125,12 +1396,12 @@ class OracleAdapter {
                 }
                 // prepare statement - the traditional way
                 const prepared = self.prepare(sql, values);
-                TraceUtils.debug(`SQL ${prepared}`);
+                self.logger.debug(`SQL ${prepared}`);
                 // execute raw command
                 self.rawConnection.execute(prepared,[], {outFormat: oracledb.OBJECT, autoCommit: (typeof self.transaction === 'undefined') }, function(err, result) {
                     self.tryClose(function() {
                         if (err) {
-                            TraceUtils.error(`SQL Error ${prepared}`);
+                            self.logger.error(`SQL Error ${prepared}`);
                             return callback(err);
                         }
                         if (result) {
@@ -1165,351 +1436,7 @@ class OracleAdapter {
     }
 }
 
-/**
- * @class
- * @augments {SqlFormatter}
- */
-class OracleFormatter extends SqlFormatter {
-    /**
-     * @constructor
-     */
-    constructor() {
-        super();
-        this.settings = {
-            nameFormat:OracleFormatter.NAME_FORMAT,
-            forceAlias:true,
-            useAliasKeyword: false
-        };
-    }
-
-    escapeName(name) {
-        if (typeof name === 'string')
-            return name.replace(/(\w+)/ig, this.settings.nameFormat);
-        return name;
-    }
-
-    /**
-     * Escapes an object or a value and returns the equivalent sql value.
-     * @param {*} value - A value that is going to be escaped for SQL statements
-     * @param {boolean=} unquoted - An optional value that indicates whether the resulted string will be quoted or not.
-     * returns {string} - The equivalent SQL string value
-     */
-    escape(value, unquoted) {
-        if (typeof value === 'boolean') { return value ? '1' : '0'; }
-        if (value instanceof Date) {
-            return util.format('TO_TIMESTAMP_TZ(%s, \'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM\')', this.escapeDate(value));
-        }
-        if (typeof value === 'string' && LangUtils.isDate(value)) {
-            return util.format('TO_TIMESTAMP_TZ(%s, \'YYYY-MM-DD HH24:MI:SS.FF3TZH:TZM\')', this.escapeDate(new Date(value)));
-        }
-        let res = super.escape.bind(this)(value, unquoted);
-        if (typeof value === 'string') {
-            if (/\\'/g.test(res)) {
-                //escape single quote (that is already escaped)
-                res = res.replace(/\\'/g, SINGLE_QUOTE_ESCAPE);
-                if (/\\"/g.test(res))
-                //escape double quote (that is already escaped)
-                    res = res.replace(/\\"/g, DOUBLE_QUOTE_ESCAPE);
-                if (/\\\\/g.test(res))
-                //escape slash (that is already escaped)
-                    res = res.replace(/\\\\/g, SLASH_ESCAPE);
-            }
-        }
-        return res;
-    }
-
-    /**
-     * @param {Date|*} val
-     * @returns {string}
-     */
-    escapeDate(val) {
-        const year   = val.getFullYear();
-        const month  = zeroPad(val.getMonth() + 1, 2);
-        const day    = zeroPad(val.getDate(), 2);
-        const hour   = zeroPad(val.getHours(), 2);
-        const minute = zeroPad(val.getMinutes(), 2);
-        const second = zeroPad(val.getSeconds(), 2);
-        //var millisecond = zeroPad(dt.getMilliseconds(), 3);
-        //format timezone
-        const offset = (new Date()).getTimezoneOffset(), timezone = (offset<=0 ? '+' : '-') + zeroPad(-Math.floor(offset/60),2) + ':' + zeroPad(offset%60,2);
-        return '\'' + year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second + '.' + zeroPad(val.getMilliseconds(), 3) + timezone + '\'';
-    }
-
-
-    /**
-     * Formats a fixed query expression where select fields are constants e.g. SELECT 1 AS `id`,'John' AS `givenName` etc
-     * @param obj {QueryExpression|*}
-     * @returns {string}
-     */
-    formatFixedSelect(obj) {
-        let self = this;
-        let fields = obj.fields();
-        return 'SELECT ' + _.map(fields, function(x) { return self.format(x,'%f'); }).join(', ') + ' FROM DUAL';
-    }
-
-    /**
-     *
-     * @param {QueryExpression} obj
-     * @returns {string}
-     */
-    formatLimitSelect(obj) {
-
-        let sql;
-        const self=this;
-        let take = parseInt(obj.$take) || 0;
-        let skip = parseInt(obj.$skip) || 0;
-        if (take<=0) {
-            sql=self.formatSelect(obj);
-        }
-        else {
-            //add row_number with order
-            const keys = Object.keys(obj.$select);
-            if (keys.length === 0)
-                throw new Error('Entity is missing');
-            //get select fields
-            let selectFields = obj.$select[keys[0]];
-            //get order
-            let order = obj.$order;
-            //add row index field
-            selectFields.push({
-                '__RowIndex': {
-                  $row_index: order
-                }
-            });
-            //remove order
-            if (order) {
-                delete obj.$order;
-            }
-            //get sub query
-            const subQuery = self.formatSelect(obj);
-            //add order again
-            if (order) {
-                obj.$order = order;
-            }
-            //remove row index field
-            selectFields.pop();
-            const fields = [];
-            _.forEach(selectFields, (x) => {
-                if (typeof x === 'string') {
-                    fields.push(new QueryField(x));
-                }
-                else {
-                    /**
-                     * @type QueryField
-                     */
-                    let field = Object.assign(new QueryField(), x);
-                    fields.push(field.as() || field.getName());
-                }
-            });
-            sql = util.format('SELECT %s FROM (%s) t0 WHERE "__RowIndex" BETWEEN %s AND %s', _.map(fields, (x) => {
-                return self.format(x, '%f');
-            }).join(', '), subQuery, skip + 1, skip + take);
-        }
-        return sql;
-
-    }
-    isLogical(obj) {
-        let prop;
-        // eslint-disable-next-line no-unused-vars
-        for(let key in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                prop = key;
-                break;
-            }
-        }
-        return (/^\$(and|or|not|nor)$/g.test(prop));
-    }
-    /**
-     * Implements [a & b] bitwise and expression formatter.
-     * @param p0 {*}
-     * @param p1 {*}
-     */
-    $bit(p0, p1)
-    {
-        return util.format('BITAND(%s, %s)', this.escape(p0), this.escape(p1));
-    }
-
-    /**
-     * Implements indexOf(str,substr) expression formatter.
-     * @param {string} p0 The source string
-     * @param {string} p1 The string to search for
-     * @returns {string}
-     */
-    $indexof(p0, p1) {
-        return util.format('(INSTR(%s,%s)-1)', this.escape(p0), this.escape(p1));
-    }
-
-    /**
-     * Implements contains(a,b) expression formatter.
-     * @param {string} p0 The source string
-     * @param {string} p1 The string to search for
-     * @returns {string}
-     */
-    $text(p0, p1) {
-        return util.format('(INSTR(%s,%s)-1)>=0', this.escape(p0), this.escape(p1));
-    }
-
-    /**
-     * Implements concat(a,b) expression formatter.
-     * @param {*} p0
-     * @param {*} p1
-     * @returns {string}
-     */
-    $concat(p0, p1) {
-        return util.format('CONCAT(%s,%s)', this.escape(p0),  this.escape(p1));
-    }
-
-    /**
-     * Implements substring(str,pos) expression formatter.
-     * @param {String} p0 The source string
-     * @param {Number} pos The starting position
-     * @param {Number=} length The length of the resulted string
-     * @returns {string}
-     */
-    $substring(p0, pos, length) {
-        if (length)
-            return util.format('SUBSTR(%s,%s,%s)', this.escape(p0), pos.valueOf()+1, length.valueOf());
-        else
-            return util.format('SUBSTR(%s,%s)', this.escape(p0), pos.valueOf()+1);
-    }
-
-    /**
-     * Implements length(a) expression formatter.
-     * @param {*} p0
-     * @returns {string}
-     */
-    $length(p0) {
-        return util.format('LENGTH(%s)', this.escape(p0));
-    }
-
-    /**
-     * @param {...*} p0
-     * @return {*}
-     */
-    // eslint-disable-next-line no-unused-vars
-    $row_index(p0) {
-        let args = Array.prototype.slice.call(arguments);
-        return util.format('ROW_NUMBER() OVER(%s)', (args && args.length) ? this.format(args, '%o') : 'ORDER BY NULL');
-    }
-
-    $ceiling(p0) {
-        return util.format('CEIL(%s)', this.escape(p0));
-    }
-
-    $startswith(p0, p1) {
-        //validate params
-        if ( _.isNil(p0) ||  _.isNil(p1))
-            return '';
-        return 'REGEXP_COUNT(' + this.escape(p0) + ',\'^' + this.escape(p1, true) + '\', 1, \'i\')';
-    }
-
-    $contains(p0, p1) {
-        //validate params
-        if ( _.isNil(p0) ||  _.isNil(p1))
-            return '';
-        //(CASE WHEN REGEXP_COUNT(x, 'text', 1, 'i') > 0 THEN 1 ELSE 0 END)
-        return '(CASE WHEN REGEXP_COUNT(' + this.escape(p0) + ',\'' + this.escape(p1, true) + '\', 1, \'i\') > 0 THEN 1 ELSE 0 END)';
-    }
-
-    $endswith(p0, p1) {
-        //validate params
-        if ( _.isNil(p0) ||  _.isNil(p1))
-            return '';
-        return 'REGEXP_COUNT(' + this.escape(p0) + ',\'' + this.escape(p1, true) + '$\', 1, \'i\')';
-    }
-
-    $day(p0) {
-        return util.format('EXTRACT(DAY FROM %s)', this.escape(p0)) ;
-    }
-
-    $month(p0) {
-        return util.format('EXTRACT(MONTH FROM %s)', this.escape(p0)) ;
-    }
-
-    $year(p0) {
-        return util.format('EXTRACT(YEAR FROM %s)', this.escape(p0)) ;
-    }
-
-    $hour(p0) {
-        return util.format('EXTRACT(HOUR FROM %s)', this.escape(p0)) ;
-    }
-
-    $minute(p0) {
-        return util.format('EXTRACT(MINUTE FROM %s)', this.escape(p0)) ;
-    }
-
-    $second(p0) {
-        return util.format('EXTRACT(SECOND FROM %s)', this.escape(p0)) ;
-    }
-
-    $date(p0) {
-        //alternative date solution: 'TO_TIMESTAMP_TZ(TO_CHAR(%s, 'YYYY-MM-DD'),'YYYY-MM-DD')'
-        return util.format('TRUNC(%s)', this.escape(p0)) ;
-    }
-
-    /**
-     * Implements contains(a,b) expression formatter.
-     * @param {*} p0 The source string
-     * @param {string|*} p1 The string to search for
-     * @returns {string}
-     */
-    $regex(p0, p1) {
-        //validate params
-        if ( _.isNil(p0) ||  _.isNil(p1))
-            return '';
-        return 'REGEXP_LIKE(' + this.escape(p0) + ',\'' + this.escape(p1, true) + '\')';
-    }
-
-    /**
-     * @deprecated Use $ifNull() instead
-     * @param {*} p0 
-     * @param {*} p1 
-     * @returns 
-     */
-    $ifnull(p0, p1) {
-        return this.$ifNull(p0, p1) ;
-    }
-
-    $ifNull(p0, p1) {
-        return util.format('NVL(%s, %s)', this.escape(p0), this.escape(p1)) ;
-    }
-
-    $cond(ifExpr, thenExpr, elseExpr) {
-        // validate ifExpr which should an instance of QueryExpression or a comparison expression
-        let ifExpression;
-        if (instanceOf(ifExpr, QueryExpression)) {
-            ifExpression = this.formatWhere(ifExpr.$where);
-        } else if (this.isComparison(ifExpr) || this.isLogical(ifExpr)) {
-            ifExpression = this.formatWhere(ifExpr);
-        } else {
-            throw new Error('Condition parameter should be an instance of query or comparison expression');
-        }
-        return util.format('(CASE WHEN %s THEN %s ELSE %s END)', ifExpression, this.escape(thenExpr), this.escape(elseExpr));
-    }
-
-    $toString(p0) {
-        return util.format('TO_NCHAR(%s)', this.escape(p0)) ;
-    }
-
+export {
+    OracleAdapter
 }
 
-OracleFormatter.NAME_FORMAT = '"$1"';
-
-const SINGLE_QUOTE_ESCAPE = '\'\'';
-const DOUBLE_QUOTE_ESCAPE = '"';
-const SLASH_ESCAPE = '\\';
-
-/**
- * Creates an instance of OracleAdapter object that represents an Oracle database connection.
- * @param {*} options An object that represents the properties of the underlying database connection.
- * @returns {DataAdapter|*}
- */
-function createInstance(options) {
-    return new OracleAdapter(options);
-}
-
-module.exports = {
-    OracleAdapter,
-    OracleFormatter,
-    createInstance
-}
