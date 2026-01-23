@@ -538,7 +538,31 @@ class OracleFormatter extends SqlFormatter {
      * @param {...*} expr
      */
     // eslint-disable-next-line no-unused-vars
-    $jsonObject() {
+    $jsonObject(expr) {
+        // handle select expression
+        if (expr.$select) {
+            // get select fields
+            const args = Object.keys(expr.$select).reduce((previous, key) => {
+                const fields = expr.$select[key];
+                previous.push.apply(previous, fields.map((field) => {
+                    if (typeof field === 'string') {
+                        return new QueryField(field);
+                    }
+                    return field;
+                }));
+                return previous;
+            }, []);
+            const [key] = Object.keys(expr.$select);
+            // prepare select expression to return json array
+            expr.$select[key] = [
+                {
+                    $jsonObject: args // use json_object function
+                }
+            ];
+            // format select expression using json_object
+            return `(${this.format(expr)})`;
+        }
+
         // expected an array of QueryField objects
         const args = Array.from(arguments).reduce((previous, current) => {
             // get the first key of the current object
