@@ -588,6 +588,29 @@ class OracleAdapter {
                     cb(new Error('Invalid table status.'));
                 }
             },
+            function (arg, cb) {
+                if (arg <= 0) {
+                    return cb(null, arg);
+                }
+                if (migration.indexes) {
+                    const tableIndexes = self.indexes(migration.appliesTo);
+                    //enumerate migration constraints
+                    async.eachSeries(migration.indexes, function (index, indexCallback) {
+                        tableIndexes.create(index.name, index.columns, indexCallback);
+                    }, function (err) {
+                        //throw error
+                        if (err) {
+                            return cb(err);
+                        }
+                        //or return success flag
+                        return cb(null, 1);
+                    });
+                }
+                else {
+                    //do nothing and exit
+                    return cb(null, 1);
+                }
+            },
             function(arg, cb) {
                 if (arg>0) {
                     void self.selectIdentity('migrations', 'id', function(err, value) {
@@ -1193,11 +1216,10 @@ class OracleAdapter {
                     if (err) {
                         return callback(err);
                     }
-                    const indexes = result.filter(function (x) {
-                        return x.constraint !== 'P'; // Exclude primary key constraints
-                    }).map(function (x) {
+                    const indexes = result.map(function (x) {
                         return {
                             name: x.name,
+                            primary: x.constraint === 'P',
                             columns: []
                         };
                     });
@@ -1248,18 +1270,36 @@ class OracleAdapter {
                     if (err) {
                         return callback(err);
                     }
-                    const ix = indexes.find(function (x) { return x.name === name; });
+                    const index = indexes.find(function (x) { return x.name === name; });
                     //format create index SQL statement
                     const sqlCreateIndex = `CREATE INDEX ${formatter.escapeName(name)} ON ${formatter.escapeName(table)}(${cols.map(function (x) { return formatter.escapeName(x); }).join(',')})`
-                    if (typeof ix === 'undefined' || ix === null) {
+                    if (index == null) {
+                        // try to find if the current index has the same columns with the primary key index
+                        const primaryIndex = indexes.find(function (x) {
+                            // noinspection JSUnresolvedReference
+                            return x.primary;
+                        });
+                        if (primaryIndex) {
+                            const missing = columns.some((col) => {
+                                return primaryIndex.columns.includes(col) === false;
+                            });
+                            if (!missing) {
+                                return callback();
+                            }
+                        }
                         return self.execute(sqlCreateIndex, [], (err, result) => {
                             return callback(err, result)
                         });
                     }
                     else {
+                        // noinspection JSUnresolvedReference
+                        if (index.primary) {
+                            // do nothing, a primary key index cannot be dropped or recreated using this process
+                            return callback();
+                        }
                         let nCols = cols.length;
                         //enumerate existing columns
-                        ix.columns.forEach(function (x) {
+                        index.columns.forEach(function (x) {
                             if (cols.indexOf(x) >= 0) {
                                 //column exists in index
                                 nCols -= 1;

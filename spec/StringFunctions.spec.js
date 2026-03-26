@@ -99,7 +99,7 @@ describe('StringFunctions', () => {
         });
     });
 
-    it('should use indexOf()', async () => {
+    it('should use indexOf() with length', async () => {
         await app.executeInTestTransaction(async (context) => {
             let items = await context.model('Product')
                 .asQueryable().where('name').substr(0, 2).equal('Ap').getItems();
