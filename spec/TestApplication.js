@@ -4,7 +4,9 @@ import { createInstance, OracleFormatter } from '@themost/oracle';
 import { TraceUtils, LangUtils } from '@themost/common';
 import { QueryExpression } from '@themost/query';
 import { SqliteAdapter } from '@themost/sqlite';
+import genericPool, { GenericPoolAdapter } from '@themost/pool';
 import path from 'path';
+import '@themost/promise-sequence';
 
 const testConnectionOptions = {
     'host': process.env.DB_HOST,
@@ -48,11 +50,24 @@ class TestApplication extends DataApplication {
             invariantName,
             createInstance
         });
+        dataConfiguration.adapterTypes.set('pool', {
+            name: 'Generic Pool',
+            invariantName: 'pool',
+            createInstance: genericPool.createInstance
+        });
         dataConfiguration.adapters.push({
             name: 'test',
             invariantName: 'oracle',
-            default: true,
+            default: process.env.DB_POOL !== 'true',
             options: testConnectionOptions
+        });
+        dataConfiguration.adapters.push({
+            name: 'test+pool',
+            invariantName: 'pool',
+            default: process.env.DB_POOL === 'true',
+            options: {
+                adapter: 'test'
+            }
         });
     }
 
@@ -64,7 +79,24 @@ class TestApplication extends DataApplication {
     }
 
     finalizeAsync() {
-        return this.finalize();
+        // noinspection JSUnresolvedReference
+        const keys = Object.keys(GenericPoolAdapter.pools || {});
+        return Promise.sequence(keys.map((key) => {
+            return () => {
+                // noinspection JSUnresolvedReference
+                /**
+                 * @type {import('generic-pool').Pool}
+                 */
+                const pool = GenericPoolAdapter.pools[key];
+                return pool.drain().then(() => {
+                    return pool.clear();
+                }).then(() => {
+                    return true;
+                });
+            }
+        })).then(() => {
+          return this.finalize();
+        })
     }
 
     /**
