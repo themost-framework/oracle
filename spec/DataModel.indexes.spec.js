@@ -23,6 +23,7 @@ describe('StringFunctions', () => {
     });
 
     it('should update or create indexes', async () => {
+        await context.model('Person').migrateAsync();
         await createIndexes(context, 'Person');
     });
 

@@ -7,7 +7,7 @@
     "hidden": false,
     "sealed": false,
     "inherits": "Party",
-    "version": "2.4",
+    "version": "2.4.3",
     "fields": [
         {
             "@id": "http://schema.org/colleagues",
@@ -35,7 +35,9 @@
             "name": "jobTitle",
             "title": "Job Title",
             "description": "The job title of the person (for example, Financial Manager).",
-            "type": "Text"
+            "type": "Text",
+            "indexed": true,
+            "size": 255
         },
         {
             "@id": "http://schema.org/birthPlace",

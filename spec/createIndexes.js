@@ -6,9 +6,16 @@
 async function createIndexes(context, model) {
     await context.db.executeInTransactionAsync(async () => {
         const target = context.model(model);
+        const baseAttributes = [];
+        const baseModel = target.base();
+        if (baseModel) {
+            baseAttributes.push(...baseModel.attributes.map((x) => x.name))
+        }
         const { fields, attributes, sourceAdapter: table } = target;
         // get indexes from associations
         const associationIndexes = attributes.filter((attribute) => {
+            return baseAttributes.includes(attribute.name) === false;
+        }).filter((attribute) => {
             return fields.findIndex((x) => x.name === attribute.name) > 0;
         }).filter((attribute) => {
             return !attribute.indexed;
@@ -27,6 +34,8 @@ async function createIndexes(context, model) {
         });
         // get other attributes that aremarked as indexed
         const otherIndexes = attributes.filter((attribute) => {
+            return baseAttributes.includes(attribute.name) === false;
+        }).filter((attribute) => {
             return fields.findIndex((x) => x.name === attribute.name) > 0;
         }).filter((attribute) => {
             return attribute.indexed;
