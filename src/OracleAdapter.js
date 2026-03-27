@@ -1324,7 +1324,7 @@ class OracleAdapter {
             },
             createAsync: function(name, columns) {
                 return new Promise((resolve, reject) => {
-                    this.create(name, columns, (err) => {
+                    void this.create(name, columns, (err) => {
                         if (err) {
                             return reject(err);
                         }
@@ -1336,7 +1336,7 @@ class OracleAdapter {
                 if (typeof name !== 'string') {
                     return callback(new Error('Name must be a valid string.'));
                 }
-                void this.list(function (err, indexes) {
+                void this.list((err, indexes) => {
                     if (err) {
                         return callback(err);
                     }
@@ -1346,9 +1346,15 @@ class OracleAdapter {
                     }
                     //format drop index SQL statement
                     const sqlDropIndex = `DROP INDEX ${formatter.escapeName(name)}`;
-                    void self.execute(sqlDropIndex, null, function (err) {
+                    void self.execute(sqlDropIndex, null, (err) => {
                         if (err) {
                             return callback(err);
+                        }
+                        if (Array.isArray(this._indexes)) {
+                            const i = this._indexes.findIndex((x) => x.name === name);
+                            if (i >= 0) {
+                                this._indexes.splice(i, 1);
+                            }
                         }
                         return callback();
                     });
