@@ -5,11 +5,15 @@
  */
 async function createIndexes(context, model) {
     await context.db.executeInTransactionAsync(async () => {
-        const target = context.model('Order');
-        const { fields: attributes, sourceAdapter: table } = target;
+        const target = context.model(model);
+        const { fields, attributes, sourceAdapter: table } = target;
         // get indexes from associations
         const associationIndexes = attributes.filter((attribute) => {
+            return fields.findIndex((x) => x.name === attribute.name) > 0;
+        }).filter((attribute) => {
             return !attribute.indexed;
+        }).filter((attribute) => {
+            return !attribute.many;
         }).filter((attribute) => {
             const mapping = target.inferMapping(attribute.name);
             return mapping && mapping.associationType === 'association';
@@ -23,7 +27,11 @@ async function createIndexes(context, model) {
         });
         // get other attributes that aremarked as indexed
         const otherIndexes = attributes.filter((attribute) => {
+            return fields.findIndex((x) => x.name === attribute.name) > 0;
+        }).filter((attribute) => {
             return attribute.indexed;
+        }).filter((attribute) => {
+            return !attribute.many;
         }).map((attribute) => {
             return {
                 name: `INDEX_${table.toUpperCase()}_${attribute.name.toUpperCase()}`,

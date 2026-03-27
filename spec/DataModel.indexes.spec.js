@@ -23,7 +23,7 @@ describe('StringFunctions', () => {
     });
 
     it('should update or create indexes', async () => {
-        await createIndexes(context, 'Order');
+        await createIndexes(context, 'Person');
     });
 
 });

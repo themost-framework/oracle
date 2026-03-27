@@ -1288,7 +1288,16 @@ class OracleAdapter {
                             }
                         }
                         return self.execute(sqlCreateIndex, [], (err, result) => {
-                            return callback(err, result)
+                            if (err) {
+                                return callback(err);
+                            }
+                            if (Array.isArray(thisArg._indexes)) {
+                                thisArg._indexes.push({
+                                    name,
+                                    columns: cols
+                                })
+                            }
+                            return callback(err)
                         });
                     }
                     else {
@@ -1312,7 +1321,18 @@ class OracleAdapter {
                                     return callback(err);
                                 }
                                 //and create it
-                                self.execute(sqlCreateIndex, [], callback);
+                                self.execute(sqlCreateIndex, [], (err) => {
+                                    if (err) {
+                                        return callback(err);
+                                    }
+                                    if (Array.isArray(thisArg._indexes)) {
+                                        thisArg._indexes.push({
+                                            name,
+                                            columns: cols
+                                        })
+                                    }
+                                    return callback(err)
+                                });
                             });
                         }
                         else {
