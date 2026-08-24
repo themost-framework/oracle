@@ -45,16 +45,40 @@ class TestApplication extends DataApplication {
         // add adapter type
         const name = 'Oracle Data Adapter';
         const invariantName = 'oracle';
-        dataConfiguration.adapterTypes.set(invariantName, {
-            name,
-            invariantName,
-            createInstance
-        });
-        dataConfiguration.adapterTypes.set('pool', {
-            name: 'Generic Pool',
-            invariantName: 'pool',
-            createInstance: genericPool.createInstance
-        });
+        if (dataConfiguration.adapterTypes instanceof Map) {
+            dataConfiguration.adapterTypes.set(invariantName, {
+                name,
+                invariantName,
+                createInstance
+            });
+            dataConfiguration.adapterTypes.set('pool', {
+                name: 'Generic Pool',
+                invariantName: 'pool',
+                createInstance: genericPool.createInstance
+            });
+        } else {
+            Object.defineProperty(dataConfiguration.adapterTypes, invariantName, {
+                configurable: true,
+                enumerable: true,
+                writable: true,
+                value: {
+                    name,
+                    invariantName,
+                    createInstance
+                }
+            });
+            Object.defineProperty(dataConfiguration.adapterTypes, 'pool', {
+                configurable: true,
+                enumerable: true,
+                writable: true,
+                value: {
+                    name: 'Generic Pool',
+                    invariantName: 'pool',
+                    createInstance: genericPool.createInstance
+                }
+            });
+        }
+
         dataConfiguration.adapters.push({
             name: 'test',
             invariantName: 'oracle',

@@ -311,6 +311,16 @@ class OracleFormatter extends SqlFormatter {
     }
 
     /**
+     * @param {String} p0 The source string
+     * @param {Number} pos The starting position
+     * @param {Number=} length The length of the resulted string
+     * @returns {string}
+     */
+    $substr(p0, pos, length) {
+        return this.$substring(p0, pos, length);
+    }
+
+    /**
      * Implements length(a) expression formatter.
      * @param {*} p0
      * @returns {string}
@@ -364,6 +374,10 @@ class OracleFormatter extends SqlFormatter {
         return `EXTRACT(DAY FROM ${this.escape(p0)})`;
     }
 
+    $dayOfMonth(p0) {
+        return this.$day(p0);
+    }
+
     $month(p0) {
         if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
             return util.format('EXTRACT(MONTH FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
@@ -396,11 +410,19 @@ class OracleFormatter extends SqlFormatter {
         return util.format('EXTRACT(MINUTE FROM %s)', this.escape(p0)) ;
     }
 
+    $minutes(p0) {
+        return this.$minute(p0);
+    }
+
     $second(p0) {
         if (Object.prototype.hasOwnProperty.call(p0, '$jsonGet')) {
             return util.format('EXTRACT(SECOND FROM TO_TIMESTAMP_TZ(%s, \'%s\'))', this.escape(p0), this.settings.jsonDateFormat);
         }
         return util.format('EXTRACT(SECOND FROM %s)', this.escape(p0)) ;
+    }
+
+    $seconds(p0) {
+        return this.$second(p0);
     }
 
     $date(p0) {
