@@ -9,6 +9,11 @@
     "globals": {
       "jest":false
     },
+    "ignorePatterns": [
+      "node_modules/",
+      "dist/",
+      "**/*.d.ts"
+    ],
     "extends": "eslint:recommended",
     "rules": {
       "no-console": "off",

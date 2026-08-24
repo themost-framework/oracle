@@ -69,7 +69,6 @@ function instanceOf(any, ctor) {
 
 /**
  * @class
- * @augments {SqlFormatter}
  */
 class OracleFormatter extends SqlFormatter {
     /**
@@ -77,6 +76,9 @@ class OracleFormatter extends SqlFormatter {
      */
     constructor() {
         super();
+        /**
+         * @type {import('./OracleFormatter').OracleFormatterSettings}
+         */
         this.settings = {
             nameFormat:NAME_FORMAT,
             forceAlias:true,
@@ -455,6 +457,7 @@ class OracleFormatter extends SqlFormatter {
     }
 
     $toGuid(p0) {
+        // eslint-disable-next-line no-useless-escape
         return `REGEXP_REPLACE(STANDARD_HASH(TO_CHAR(${this.escape(p0)}),\'MD5\'), \'(.{8})(.{4})(.{4})(.{4})(.{12})\', \'\\1-\\2-\\3-\\4-\\5\')`;
     }
 
@@ -527,6 +530,34 @@ class OracleFormatter extends SqlFormatter {
      * @param {{ $jsonGet: Array<*> }} expr
      */
     $jsonGroupArray(expr) {
+        if (expr instanceof QueryField) {
+            return `JSON_ARRAYAGG(${this.escape(expr)})`;
+        }
+        // noinspection JSUnresolvedReference
+        if (expr && expr.$name) {
+            return `JSON_ARRAYAGG(${this.escape(expr)})`;
+        }
+        // noinspection JSUnresolvedReference
+        if (expr && expr.$select) {
+            // noinspection JSUnresolvedReference
+            if (typeof this.$query !== 'function') {
+                throw new Error('Invalid query expression. The given expression is a select expression but the current formatter does not support formatting inner select expressions. Please provide a valid query formatter that supports inner select expressions.');
+            }
+            // get select fields
+            const [key] = Object.keys(expr.$select);
+            const select = expr.$select[key];
+            if (!Array.isArray(select) || select.length === 0) {
+                throw new Error('Invalid json group array expression. Expected an array of select fields');
+            }
+            // wrap the first select field with json_group_array function
+            select[0] = {
+                $jsonGroupArray: [
+                    select[0]
+                ]
+            }
+            // noinspection JSUnresolvedReference
+            return `${this.$query(expr)}`;
+        }
         const [key] = Object.keys(expr);
         if (key !== '$jsonObject') {
             throw new Error('Invalid json group array expression. Expected a json object expression');
